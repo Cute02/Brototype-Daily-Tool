@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from src.models import Task
 
 
@@ -11,6 +11,13 @@ class StorageManager:
     def __init__(self, file_path: str = "daily_tasks.json"):
         self.file_path = Path(file_path).resolve()
         self.backup_path = self.file_path.with_suffix(".json.bak")
+
+    @classmethod
+    def get_for_user(cls, username: Optional[str] = None) -> "StorageManager":
+        if username and username.strip():
+            safe_user = "".join(c for c in username.strip().lower() if c.isalnum() or c in "_-")
+            return cls(file_path=f"daily_tasks_{safe_user}.json")
+        return cls(file_path="daily_tasks.json")
 
     def load_tasks(self) -> List[Task]:
         """Load tasks from JSON file. Returns empty list if file doesn't exist or is invalid."""

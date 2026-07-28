@@ -8,10 +8,12 @@ const state = {
   currentSort: 'priority',
   searchQuery: '',
   mentorEmail: localStorage.getItem('mentor_email') || 'mentor@brototype.com',
+  authToken: localStorage.getItem('auth_token') || null,
+  currentUser: null,
   // Pomodoro State
   pomo: {
-    mode: 'work', // 'work', 'shortBreak', 'longBreak'
-    duration: 1500, // 25 mins in seconds
+    mode: 'work',
+    duration: 1500,
     timeLeft: 1500,
     timerId: null,
     isRunning: false,
@@ -20,9 +22,9 @@ const state = {
 };
 
 const POMO_DURATIONS = {
-  work: 1500,       // 25 mins
-  shortBreak: 300,  // 5 mins
-  longBreak: 900    // 15 mins
+  work: 1500,
+  shortBreak: 300,
+  longBreak: 900
 };
 
 // Web Audio Chime Generator
@@ -33,8 +35,8 @@ function playChime() {
     const gain = audioCtx.createGain();
     
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
     
     gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
@@ -59,6 +61,15 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 3500);
 }
 
+// Auth Headers Helper
+function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.authToken) {
+    headers['Authorization'] = `Bearer ${state.authToken}`;
+  }
+  return headers;
+}
+
 // REST API Methods
 async function fetchTasks() {
   try {
@@ -70,7 +81,7 @@ async function fetchTasks() {
       url += `&search=${encodeURIComponent(state.searchQuery)}`;
     }
 
-    const res = await fetch(url);
+    const res = await fetch(url, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error("Failed to load tasks");
     const data = await res.json();
     
@@ -89,7 +100,7 @@ async function addTask(taskData) {
   try {
     const res = await fetch('/api/tasks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(taskData)
     });
     if (!res.ok) throw new Error("Failed to add task");
@@ -104,7 +115,7 @@ async function updateTaskStatus(id, status, notes = null) {
   try {
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ status, notes })
     });
     if (!res.ok) throw new Error("Failed to update status");
@@ -119,7 +130,7 @@ async function updateTaskFullDetails(id, details) {
   try {
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(details)
     });
     if (!res.ok) throw new Error("Failed to update task");
@@ -133,12 +144,156 @@ async function updateTaskFullDetails(id, details) {
 async function deleteTask(id) {
   if (!confirm("Are you sure you want to delete this task?")) return;
   try {
-    const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/tasks/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
     if (!res.ok) throw new Error("Failed to delete task");
     showToast('Task deleted', 'info');
     await fetchTasks();
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');
+  }
+}
+
+// Authentication API Methods
+async function checkAuthStatus() {
+  if (!state.authToken) {
+    updateAuthUI(false, null);
+    return;
+  }
+  try {
+    const res = await fetch('/api/auth/me', { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error("Session expired");
+    const data = await res.json();
+    if (data.authenticated) {
+      state.currentUser = data.username;
+      updateAuthUI(true, data.username);
+    } else {
+      logoutUser(false);
+    }
+  } catch (e) {
+    logoutUser(false);
+  }
+}
+
+async function loginUser(username, password) {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Login failed");
+    }
+
+    state.authToken = data.token;
+    state.currentUser = data.username;
+    localStorage.setItem('auth_token', data.token);
+
+    updateAuthUI(true, data.username);
+    closeAuthModal();
+    showToast(`🔓 Welcome back, ${data.username}!`, 'success');
+    await fetchTasks();
+  } catch (err) {
+    showToast(`Login Error: ${err.message}`, 'error');
+  }
+}
+
+async function registerUser(username, password) {
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Registration failed");
+    }
+
+    state.authToken = data.token;
+    state.currentUser = data.username;
+    localStorage.setItem('auth_token', data.token);
+
+    updateAuthUI(true, data.username);
+    closeAuthModal();
+    showToast(`✨ Account created! Welcome, ${data.username}!`, 'success');
+    await fetchTasks();
+  } catch (err) {
+    showToast(`Register Error: ${err.message}`, 'error');
+  }
+}
+
+async function logoutUser(notify = true) {
+  if (state.authToken) {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+    } catch (e) {}
+  }
+
+  state.authToken = null;
+  state.currentUser = null;
+  localStorage.removeItem('auth_token');
+
+  updateAuthUI(false, null);
+  if (notify) showToast('Logged out successfully', 'info');
+  await fetchTasks();
+}
+
+function updateAuthUI(isLoggedIn, username) {
+  const badge = document.getElementById('user-profile-badge');
+  const nameSpan = document.getElementById('user-display-name');
+  const loginBtn = document.getElementById('login-modal-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  if (isLoggedIn && username) {
+    if (nameSpan) nameSpan.innerText = username;
+    if (badge) badge.style.display = 'flex';
+    if (loginBtn) loginBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+  } else {
+    if (badge) badge.style.display = 'none';
+    if (loginBtn) loginBtn.style.display = 'inline-flex';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+  }
+}
+
+function openAuthModal(tab = 'login') {
+  const modal = document.getElementById('auth-modal');
+  switchAuthTab(tab);
+  if (modal) modal.classList.add('active');
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById('auth-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function switchAuthTab(tab) {
+  const loginTab = document.getElementById('auth-tab-login');
+  const registerTab = document.getElementById('auth-tab-register');
+  const loginForm = document.getElementById('login-form');
+  const registerForm = document.getElementById('register-form');
+  const title = document.getElementById('auth-modal-title');
+
+  if (tab === 'login') {
+    if (loginTab) loginTab.classList.add('active');
+    if (registerTab) registerTab.classList.remove('active');
+    if (loginForm) loginForm.style.display = 'block';
+    if (registerForm) registerForm.style.display = 'none';
+    if (title) title.innerText = '🔐 Sign In to Brototype Tasks';
+  } else {
+    if (registerTab) registerTab.classList.add('active');
+    if (loginTab) loginTab.classList.remove('active');
+    if (registerForm) registerForm.style.display = 'block';
+    if (loginForm) loginForm.style.display = 'none';
+    if (title) title.innerText = '✨ Create Brototype Account';
   }
 }
 
@@ -200,7 +355,6 @@ function renderTodoList() {
       </div>
     `;
 
-    // Event handlers
     item.querySelector('.task-checkbox').addEventListener('click', (e) => {
       const current = e.currentTarget.getAttribute('data-current');
       const nextStatus = current === 'Completed' ? 'Pending' : 'Completed';
@@ -263,37 +417,9 @@ function updateTimerDisplay() {
 
 function updatePomoToggleButton(text, className) {
   const toggleBtn = document.getElementById('pomo-toggle-btn');
-  const startBtn = document.getElementById('pomo-start-btn');
-  const pauseBtn = document.getElementById('pomo-pause-btn');
-
   if (toggleBtn) {
     toggleBtn.innerText = text;
     toggleBtn.className = `btn ${className}`;
-  }
-  if (startBtn) {
-    if (text === '⏸ Pause') {
-      startBtn.disabled = true;
-      startBtn.innerText = '▶ Running...';
-    } else {
-      startBtn.disabled = false;
-      startBtn.innerText = text;
-      startBtn.className = `btn ${className}`;
-    }
-  }
-  if (pauseBtn) {
-    if (text === '⏸ Pause') {
-      pauseBtn.disabled = false;
-      pauseBtn.innerText = '⏸ Pause';
-      pauseBtn.className = 'btn btn-warning';
-    } else if (text === '▶ Resume') {
-      pauseBtn.disabled = false;
-      pauseBtn.innerText = '▶ Resume';
-      pauseBtn.className = 'btn btn-success';
-    } else {
-      pauseBtn.disabled = true;
-      pauseBtn.innerText = '⏸ Pause';
-      pauseBtn.className = 'btn btn-warning';
-    }
   }
 }
 
@@ -311,7 +437,6 @@ function startPomodoro() {
       playChime();
       showToast('🎉 Pomodoro Session Completed!', 'success');
 
-      // Prompt to complete active task if selected
       const taskId = document.getElementById('pomo-task-select').value;
       if (taskId) {
         if (confirm("Focus session finished! Mark this target task as Completed?")) {
@@ -350,8 +475,8 @@ function setCustomPomoMinutes(mins) {
 
 function adjustPomoSeconds(deltaSeconds) {
   let newTime = state.pomo.timeLeft + deltaSeconds;
-  if (newTime < 60) newTime = 60; // Minimum 1 min
-  if (newTime > 10800) newTime = 10800; // Maximum 3 hours (10800s)
+  if (newTime < 60) newTime = 60;
+  if (newTime > 10800) newTime = 10800;
   
   state.pomo.timeLeft = newTime;
   state.pomo.duration = newTime;
@@ -392,6 +517,7 @@ function generateMentorReportText() {
   const pendingTasks = state.tasks.filter(t => t.status === 'Pending');
   const blockedTasks = state.tasks.filter(t => t.status === 'Blocked');
   const stats = state.stats || {};
+  const studentName = state.currentUser ? state.currentUser.toUpperCase() : "Brototype Student";
 
   let text = `Subject: Brototype Daily Task Update - ${today}\n\n`;
   text += `Hi Mentor,\n\nHere is my Brototype daily progress report for ${today}:\n\n`;
@@ -432,7 +558,7 @@ function generateMentorReportText() {
     text += `\n`;
   }
 
-  text += `Thank you,\nBrototype Student\n`;
+  text += `Thank you,\n${studentName}\n`;
   return text;
 }
 
@@ -503,7 +629,32 @@ function escapeHtml(str) {
 
 // Event Listeners Setup
 document.addEventListener('DOMContentLoaded', () => {
+  checkAuthStatus();
   fetchTasks();
+
+  // Authentication Handlers
+  document.getElementById('login-modal-btn').addEventListener('click', () => openAuthModal('login'));
+  document.getElementById('close-auth-modal').addEventListener('click', closeAuthModal);
+  document.getElementById('cancel-auth-modal').addEventListener('click', closeAuthModal);
+  document.getElementById('cancel-register-modal').addEventListener('click', closeAuthModal);
+  document.getElementById('logout-btn').addEventListener('click', () => logoutUser());
+
+  document.getElementById('auth-tab-login').addEventListener('click', () => switchAuthTab('login'));
+  document.getElementById('auth-tab-register').addEventListener('click', () => switchAuthTab('register'));
+
+  document.getElementById('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = document.getElementById('login-username').value;
+    const p = document.getElementById('login-password').value;
+    loginUser(u, p);
+  });
+
+  document.getElementById('register-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = document.getElementById('register-username').value;
+    const p = document.getElementById('register-password').value;
+    registerUser(u, p);
+  });
 
   // Add Task Form Handler
   document.getElementById('add-task-form').addEventListener('submit', (e) => {
@@ -567,16 +718,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Pomodoro Controls
   const toggleBtn = document.getElementById('pomo-toggle-btn');
   if (toggleBtn) toggleBtn.addEventListener('click', togglePomodoro);
-  
-  const startBtn = document.getElementById('pomo-start-btn');
-  if (startBtn) startBtn.addEventListener('click', startPomodoro);
-  
-  const pauseBtn = document.getElementById('pomo-pause-btn');
-  if (pauseBtn) pauseBtn.addEventListener('click', togglePomodoro);
 
   document.getElementById('pomo-reset-btn').addEventListener('click', resetPomodoro);
 
-  // Preset Multiples Dropdown (5m, 10m, 15m, 20m, 25m, 30m, 40m, 45m, 50m, 60m)
   const presetSelect = document.getElementById('pomo-preset-select');
   if (presetSelect) {
     presetSelect.addEventListener('change', (e) => {
@@ -584,7 +728,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Quick Mode buttons
   document.querySelectorAll('.pomo-mode-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       document.querySelectorAll('.pomo-mode-btn').forEach(b => b.classList.remove('active'));
@@ -596,7 +739,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Adjust +/-5m and +/-10m buttons
   document.querySelectorAll('.btn-adjust').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const delta = parseInt(e.target.getAttribute('data-adjust'));
