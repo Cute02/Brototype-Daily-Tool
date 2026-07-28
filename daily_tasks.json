@@ -1,0 +1,86 @@
+[
+  {
+    "id": 1,
+    "title": "Python Data Structures: Practice Linked List & BST",
+    "category": "Data Structures",
+    "status": "Pending",
+    "priority": "High",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 09:00:00",
+    "updated_at": "2026-07-28 10:41:01",
+    "notes": "Implemented singly linked list and binary search tree traversals."
+  },
+  {
+    "id": 2,
+    "title": "Brototype Daily Task Update & Status Sync",
+    "category": "Daily Routine",
+    "status": "Completed",
+    "priority": "High",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 09:15:00",
+    "updated_at": "2026-07-28 10:05:00",
+    "notes": "Updated daily log and logged task progress."
+  },
+  {
+    "id": 3,
+    "title": "LeetCode Daily Challenge - Dynamic Programming",
+    "category": "Problem Solving",
+    "status": "In Progress",
+    "priority": "Medium",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 09:30:00",
+    "updated_at": "2026-07-28 10:10:00",
+    "notes": "Solving memoization approach for 0/1 Knapsack variation."
+  },
+  {
+    "id": 4,
+    "title": "Domain Code Review & Task Refactoring",
+    "category": "Code Review",
+    "status": "Pending",
+    "priority": "High",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 09:45:00",
+    "updated_at": "2026-07-28 09:45:00",
+    "notes": "Prepare codebase for advisor code review."
+  },
+  {
+    "id": 5,
+    "title": "Mock Technical Interview Practice",
+    "category": "Soft Skills",
+    "status": "Blocked",
+    "priority": "Low",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 10:00:00",
+    "updated_at": "2026-07-28 10:10:00",
+    "notes": "Waiting for mentor schedule confirmation."
+  },
+  {
+    "id": 6,
+    "title": "Practice Dynamic Programming & Graph Algorithms",
+    "category": "Algorithms",
+    "status": "Completed",
+    "priority": "High",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 10:21:13",
+    "updated_at": "2026-07-28 10:21:22",
+    "notes": "Solved 3 Graph BFS/DFS problems"
+  },
+  {
+    "id": 7,
+    "title": "Matrix operations",
+    "category": "Maths",
+    "status": "Pending",
+    "priority": "Medium",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-28 10:44:48",
+    "updated_at": "2026-07-28 10:44:48",
+    "notes": "Should Study the ML Applications of Matrix"
+  }
+]

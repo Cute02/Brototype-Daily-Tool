@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brototype Daily Task Tool - To-Do & Focus Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1>Brototype Daily Tasks</h1>
+          <p class="subtitle">Daily To-Do, Pomodoro Focus & Mentor Reporting</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="config-mentor-btn" class="btn btn-secondary">
+          <span class="btn-icon">👤</span> Mentor Email
+        </button>
+        <button id="send-report-btn" class="btn btn-primary btn-glow">
+          <span class="btn-icon">📧</span> Send Report to Mentor
+        </button>
+      </div>
+    </header>
+
+    <!-- Productivity Summary Dashboard -->
+    <section class="stats-dashboard">
+      <div class="stat-card total">
+        <div class="stat-icon">📋</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-total">0</span>
+          <span class="stat-label">Total Tasks</span>
+        </div>
+      </div>
+      <div class="stat-card completed">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-completed">0</span>
+          <span class="stat-label">Completed</span>
+        </div>
+      </div>
+      <div class="stat-card in-progress">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-in-progress">0</span>
+          <span class="stat-label">In Progress</span>
+        </div>
+      </div>
+      <div class="stat-card pending">
+        <div class="stat-icon">📌</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-pending">0</span>
+          <span class="stat-label">Pending</span>
+        </div>
+      </div>
+      <div class="stat-card blocked">
+        <div class="stat-icon">🛑</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-blocked">0</span>
+          <span class="stat-label">Blocked</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Completion Rate Progress Bar -->
+    <div class="progress-container">
+      <div class="progress-header">
+        <span>Daily Completion Rate</span>
+        <span id="progress-percentage">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-bar" id="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <main class="main-layout">
+      <!-- Left Column: Pomodoro & Add Task -->
+      <aside class="sidebar-layout">
+        <!-- 🍅 Pomodoro Focus Timer -->
+        <div class="card pomodoro-card">
+          <div class="card-header">
+            <h2>🍅 Pomodoro Focus Timer</h2>
+            <span class="badge badge-info" id="pomo-mode-badge">Work Session</span>
+          </div>
+          <div class="pomo-modes">
+            <button class="pomo-mode-btn active" data-mode="work">25m Work</button>
+            <button class="pomo-mode-btn" data-mode="shortBreak">5m Break</button>
+            <button class="pomo-mode-btn" data-mode="longBreak">15m Break</button>
+          </div>
+
+          <div class="timer-display" id="timer-display">25:00</div>
+
+          <div class="pomo-task-selector">
+            <label for="pomo-task-select">Focus Target Task:</label>
+            <select id="pomo-task-select">
+              <option value="">-- Select Task --</option>
+            </select>
+          </div>
+
+          <div class="pomo-controls">
+            <button id="pomo-toggle-btn" class="btn btn-success" style="min-width: 130px;">▶ Start Focus</button>
+            <button id="pomo-reset-btn" class="btn btn-secondary">🔄 Reset</button>
+          </div>
+        </div>
+
+        <!-- Add New Task Form -->
+        <div class="card add-task-card">
+          <div class="card-header">
+            <h2>➕ Add Daily Task</h2>
+          </div>
+          <form id="add-task-form">
+            <div class="form-group">
+              <label for="task-title">Task Title *</label>
+              <input type="text" id="task-title" placeholder="e.g., Practice BST Traversals" required>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="task-priority">Priority</label>
+                <select id="task-priority">
+                  <option value="High">🔴 High</option>
+                  <option value="Medium" selected>🟡 Medium</option>
+                  <option value="Low">🔵 Low</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="task-duration">Scheduled Duration</label>
+                <select id="task-duration">
+                  <option value="30 mins">⏱ 30 mins</option>
+                  <option value="1 hr" selected>⏱ 1 hour</option>
+                  <option value="2 hrs">⏱ 2 hours</option>
+                  <option value="3 hrs">⏱ 3 hours</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="task-category">Category</label>
+              <input type="text" id="task-category" placeholder="e.g., Data Structures, Web Dev, Review" value="General">
+            </div>
+
+            <div class="form-group">
+              <label for="task-notes">Notes / Details</label>
+              <textarea id="task-notes" rows="2" placeholder="Optional implementation details or blockers..."></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">➕ Add Task</button>
+          </form>
+        </div>
+      </aside>
+
+      <!-- Right Column: Interactive To-Do List -->
+      <section class="content-layout">
+        <div class="card todo-card">
+          <!-- Filters & Sorting Toolbar -->
+          <div class="toolbar">
+            <div class="filter-tabs">
+              <button class="tab-btn active" data-status="ALL">All</button>
+              <button class="tab-btn" data-status="Pending">Pending</button>
+              <button class="tab-btn" data-status="In Progress">In Progress</button>
+              <button class="tab-btn" data-status="Completed">Completed</button>
+              <button class="tab-btn" data-status="Blocked">Blocked</button>
+            </div>
+
+            <div class="toolbar-right">
+              <select id="sort-select" class="select-sm">
+                <option value="priority">Sort by: Priority (High First)</option>
+                <option value="status">Sort by: Status</option>
+                <option value="id">Sort by: Creation ID</option>
+              </select>
+              <input type="text" id="search-input" placeholder="🔍 Search tasks..." class="search-input">
+            </div>
+          </div>
+
+          <!-- To-Do List Container -->
+          <div class="todo-list" id="todo-list">
+            <!-- Dynamic task items rendered here -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: Send Report to Mentor -->
+  <div class="modal-overlay" id="email-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>📧 Send Daily Progress Report to Mentor</h2>
+        <button class="close-btn" id="close-email-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="mentor-email-input">Mentor Email Address:</label>
+          <input type="email" id="mentor-email-input" placeholder="mentor@brototype.com">
+        </div>
+
+        <div class="form-group">
+          <label>Report Subject:</label>
+          <input type="text" id="email-subject-input" readonly>
+        </div>
+
+        <div class="form-group">
+          <label>Formatted Report Body:</label>
+          <textarea id="email-body-preview" rows="12" readonly></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="copy-report-btn" class="btn btn-secondary">
+          <span class="btn-icon">📋</span> Copy Report
+        </button>
+        <button id="open-mailto-btn" class="btn btn-primary btn-glow">
+          <span class="btn-icon">🚀</span> Open Email App
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Task -->
+  <div class="modal-overlay" id="edit-task-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>✏️ Edit Task</h2>
+        <button class="close-btn" id="close-edit-modal">&times;</button>
+      </div>
+      <form id="edit-task-form">
+        <input type="hidden" id="edit-task-id">
+        <div class="form-group">
+          <label for="edit-task-title">Task Title *</label>
+          <input type="text" id="edit-task-title" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-task-priority">Priority</label>
+            <select id="edit-task-priority">
+              <option value="High">🔴 High</option>
+              <option value="Medium">🟡 Medium</option>
+              <option value="Low">🔵 Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="edit-task-duration">Scheduled Duration</label>
+            <select id="edit-task-duration">
+              <option value="30 mins">⏱ 30 mins</option>
+              <option value="1 hr">⏱ 1 hour</option>
+              <option value="2 hrs">⏱ 2 hours</option>
+              <option value="3 hrs">⏱ 3 hours</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="edit-task-category">Category</label>
+            <input type="text" id="edit-task-category">
+          </div>
+          <div class="form-group">
+            <label for="edit-task-status">Status</label>
+            <select id="edit-task-status">
+              <option value="Pending">📌 Pending</option>
+              <option value="In Progress">⏳ In Progress</option>
+              <option value="Completed">✅ Completed</option>
+              <option value="Blocked">🛑 Blocked</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="edit-task-notes">Notes / Details</label>
+          <textarea id="edit-task-notes" rows="3"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancel-edit-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-glow">💾 Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
