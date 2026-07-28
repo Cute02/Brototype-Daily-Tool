@@ -102,13 +102,15 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/auth/register":
             try:
                 username = data.get("username", "")
+                email = data.get("email", "")
                 password = data.get("password", "")
-                auth_manager.register_user(username, password)
-                token = auth_manager.create_session(username)
+                res = auth_manager.register_user(username, password, email)
+                token = auth_manager.create_session(res["username"])
                 self._send_json({
                     "success": True,
                     "message": "User registered successfully",
-                    "username": username.strip().lower(),
+                    "username": res["username"],
+                    "email": res.get("email", ""),
                     "token": token
                 }, status=201)
             except Exception as e:
@@ -117,18 +119,48 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path == "/api/auth/login":
             try:
-                username = data.get("username", "")
+                identifier = data.get("identifier") or data.get("username", "")
                 password = data.get("password", "")
-                auth_manager.authenticate_user(username, password)
-                token = auth_manager.create_session(username)
+                res = auth_manager.authenticate_user(identifier, password)
+                token = auth_manager.create_session(res["username"])
                 self._send_json({
                     "success": True,
                     "message": "Login successful",
-                    "username": username.strip().lower(),
+                    "username": res["username"],
                     "token": token
                 })
             except Exception as e:
                 self._send_error_json(str(e), status=401)
+            return
+
+        if self.path == "/api/auth/request-otp":
+            try:
+                identifier = data.get("identifier") or data.get("username") or data.get("email", "")
+                otp_code, username = auth_manager.generate_otp(identifier)
+                self._send_json({
+                    "success": True,
+                    "message": f"OTP sent to {identifier}. Demo OTP: {otp_code}",
+                    "otp": otp_code,
+                    "username": username
+                })
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
+            return
+
+        if self.path == "/api/auth/verify-otp":
+            try:
+                identifier = data.get("identifier") or data.get("username") or data.get("email", "")
+                otp_code = data.get("otp", "")
+                res = auth_manager.verify_otp(identifier, otp_code)
+                token = auth_manager.create_session(res["username"])
+                self._send_json({
+                    "success": True,
+                    "message": "OTP verification successful",
+                    "username": res["username"],
+                    "token": token
+                })
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
             return
 
         if self.path == "/api/auth/logout":

@@ -32,7 +32,7 @@ def test_user_registration_and_authentication(temp_users_file):
         auth.register_user("neha_dev", "newpass")
 
     # Invalid login
-    with pytest.raises(ValueError, match="Invalid username or password"):
+    with pytest.raises(ValueError, match="Invalid username"):
         auth.authenticate_user("neha_dev", "wrongpass")
 
     # Valid login
@@ -50,3 +50,26 @@ def test_session_management(temp_users_file):
 
     auth.revoke_session(token)
     assert auth.verify_session(token) is None
+
+
+def test_email_login_and_otp_auth(temp_users_file):
+    auth = AuthManager(file_path=temp_users_file)
+    auth.register_user("alex_dev", "pass1234", email="alex@brototype.com")
+
+    # Login with email + password
+    res = auth.authenticate_user("alex@brototype.com", "pass1234")
+    assert res["username"] == "alex_dev"
+
+    # Generate OTP via email
+    otp, uname = auth.generate_otp("alex@brototype.com")
+    assert len(otp) == 6
+    assert uname == "alex_dev"
+
+    # Verify invalid OTP
+    with pytest.raises(ValueError, match="Invalid OTP"):
+        auth.verify_otp("alex_dev", "000000")
+
+    # Verify valid OTP
+    res_otp = auth.verify_otp("alex_dev", otp)
+    assert res_otp["username"] == "alex_dev"
+

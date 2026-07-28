@@ -338,16 +338,48 @@
       <!-- Login Form -->
       <form id="login-form">
         <div class="form-group">
-          <label for="login-username">Username *</label>
-          <input type="text" id="login-username" placeholder="Enter your username" required autocomplete="username">
+          <label for="login-username">Username or Email *</label>
+          <input type="text" id="login-username" placeholder="e.g. dev_user or user@brototype.com" required autocomplete="username">
         </div>
-        <div class="form-group">
-          <label for="login-password">Password *</label>
-          <input type="password" id="login-password" placeholder="Enter password" required autocomplete="current-password">
+
+        <div class="auth-mode-selector" style="display: flex; gap: 10px; margin-bottom: 15px;">
+          <button type="button" class="btn btn-secondary active" id="mode-password-btn" style="flex: 1;">🔑 Password</button>
+          <button type="button" class="btn btn-secondary" id="mode-otp-btn" style="flex: 1;">📱 OTP (One-Time Passcode)</button>
         </div>
-        <div class="modal-footer" style="padding-top: 10px;">
-          <button type="button" class="btn btn-secondary" id="cancel-auth-modal">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-glow">🔓 Login</button>
+
+        <!-- Password Container -->
+        <div id="password-login-container">
+          <div class="form-group">
+            <label for="login-password">Password *</label>
+            <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password">
+          </div>
+          <div class="modal-footer" style="padding-top: 10px;">
+            <button type="button" class="btn btn-secondary" id="cancel-auth-modal">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-glow">🔓 Login with Password</button>
+          </div>
+        </div>
+
+        <!-- OTP Container -->
+        <div id="otp-login-container" style="display: none;">
+          <div class="form-group">
+            <button type="button" id="request-otp-btn" class="btn btn-secondary btn-block">
+              📩 Request 6-Digit OTP
+            </button>
+          </div>
+
+          <div id="otp-demo-badge" class="badge badge-info" style="display: none; width: 100%; text-align: center; margin-bottom: 12px; font-size: 0.95rem; padding: 8px;">
+            Demo OTP Code: <strong id="demo-otp-val">------</strong>
+          </div>
+
+          <div class="form-group">
+            <label for="login-otp">Enter 6-Digit OTP Code *</label>
+            <input type="text" id="login-otp" placeholder="e.g. 123456" maxlength="6" pattern="[0-9]{6}">
+          </div>
+
+          <div class="modal-footer" style="padding-top: 10px;">
+            <button type="button" class="btn btn-secondary" id="cancel-otp-modal">Cancel</button>
+            <button type="button" id="verify-otp-btn" class="btn btn-success btn-glow">✅ Verify OTP & Login</button>
+          </div>
         </div>
       </form>
 
@@ -356,6 +388,10 @@
         <div class="form-group">
           <label for="register-username">Choose Username *</label>
           <input type="text" id="register-username" placeholder="At least 3 characters" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="register-email">Email Address (Optional)</label>
+          <input type="email" id="register-email" placeholder="e.g. user@brototype.com" autocomplete="email">
         </div>
         <div class="form-group">
           <label for="register-password">Choose Password *</label>

@@ -177,12 +177,12 @@ async function checkAuthStatus() {
   }
 }
 
-async function loginUser(username, password) {
+async function loginUser(identifier, password) {
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ identifier, password })
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
@@ -202,12 +202,12 @@ async function loginUser(username, password) {
   }
 }
 
-async function registerUser(username, password) {
+async function registerUser(username, password, email = "") {
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, email })
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
@@ -224,6 +224,63 @@ async function registerUser(username, password) {
     await fetchTasks();
   } catch (err) {
     showToast(`Register Error: ${err.message}`, 'error');
+  }
+}
+
+async function requestOTP(identifier) {
+  if (!identifier) {
+    showToast('Please enter your Username or Email first.', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/auth/request-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Failed to generate OTP");
+    }
+
+    const demoBadge = document.getElementById('otp-demo-badge');
+    const demoVal = document.getElementById('demo-otp-val');
+    if (demoBadge && demoVal) {
+      demoVal.innerText = data.otp;
+      demoBadge.style.display = 'block';
+    }
+    showToast(`📩 OTP sent! Demo Code: ${data.otp}`, 'success');
+  } catch (err) {
+    showToast(`OTP Request Error: ${err.message}`, 'error');
+  }
+}
+
+async function verifyOTP(identifier, otp) {
+  if (!identifier || !otp) {
+    showToast('Please provide both Username/Email and 6-digit OTP.', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, otp })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "OTP verification failed");
+    }
+
+    state.authToken = data.token;
+    state.currentUser = data.username;
+    localStorage.setItem('auth_token', data.token);
+
+    updateAuthUI(true, data.username);
+    closeAuthModal();
+    showToast(`📱 OTP verified! Welcome back, ${data.username}!`, 'success');
+    await fetchTasks();
+  } catch (err) {
+    showToast(`OTP Error: ${err.message}`, 'error');
   }
 }
 
@@ -637,23 +694,65 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('close-auth-modal').addEventListener('click', closeAuthModal);
   document.getElementById('cancel-auth-modal').addEventListener('click', closeAuthModal);
   document.getElementById('cancel-register-modal').addEventListener('click', closeAuthModal);
+  const cancelOtpBtn = document.getElementById('cancel-otp-modal');
+  if (cancelOtpBtn) cancelOtpBtn.addEventListener('click', closeAuthModal);
   document.getElementById('logout-btn').addEventListener('click', () => logoutUser());
 
   document.getElementById('auth-tab-login').addEventListener('click', () => switchAuthTab('login'));
   document.getElementById('auth-tab-register').addEventListener('click', () => switchAuthTab('register'));
 
+  // Password vs OTP Mode Toggles
+  const modePwdBtn = document.getElementById('mode-password-btn');
+  const modeOtpBtn = document.getElementById('mode-otp-btn');
+  const pwdContainer = document.getElementById('password-login-container');
+  const otpContainer = document.getElementById('otp-login-container');
+
+  if (modePwdBtn && modeOtpBtn) {
+    modePwdBtn.addEventListener('click', () => {
+      modePwdBtn.classList.add('active');
+      modeOtpBtn.classList.remove('active');
+      pwdContainer.style.display = 'block';
+      otpContainer.style.display = 'none';
+    });
+    modeOtpBtn.addEventListener('click', () => {
+      modeOtpBtn.classList.add('active');
+      modePwdBtn.classList.remove('active');
+      pwdContainer.style.display = 'none';
+      otpContainer.style.display = 'block';
+    });
+  }
+
+  // OTP Request & Verification Handlers
+  const reqOtpBtn = document.getElementById('request-otp-btn');
+  if (reqOtpBtn) {
+    reqOtpBtn.addEventListener('click', () => {
+      const identifier = document.getElementById('login-username').value.trim();
+      requestOTP(identifier);
+    });
+  }
+
+  const verifyOtpBtn = document.getElementById('verify-otp-btn');
+  if (verifyOtpBtn) {
+    verifyOtpBtn.addEventListener('click', () => {
+      const identifier = document.getElementById('login-username').value.trim();
+      const otp = document.getElementById('login-otp').value.trim();
+      verifyOTP(identifier, otp);
+    });
+  }
+
   document.getElementById('login-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const u = document.getElementById('login-username').value;
+    const identifier = document.getElementById('login-username').value.trim();
     const p = document.getElementById('login-password').value;
-    loginUser(u, p);
+    loginUser(identifier, p);
   });
 
   document.getElementById('register-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const u = document.getElementById('register-username').value;
+    const u = document.getElementById('register-username').value.trim();
     const p = document.getElementById('register-password').value;
-    registerUser(u, p);
+    const email = document.getElementById('register-email') ? document.getElementById('register-email').value.trim() : '';
+    registerUser(u, p, email);
   });
 
   // Add Task Form Handler
