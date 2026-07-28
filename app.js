@@ -456,6 +456,19 @@ function closeMentorEmailModal() {
   document.getElementById('email-modal').classList.remove('active');
 }
 
+function sendGmailEmail() {
+  const mentorEmail = document.getElementById('mentor-email-input').value.trim() || 'mentor@brototype.com';
+  localStorage.setItem('mentor_email', mentorEmail);
+  state.mentorEmail = mentorEmail;
+
+  const subject = document.getElementById('email-subject-input').value;
+  const body = document.getElementById('email-body-preview').value;
+
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(mentorEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(gmailUrl, '_blank');
+  showToast('Opening Gmail web compose...', 'info');
+}
+
 function sendMailtoEmail() {
   const mentorEmail = document.getElementById('mentor-email-input').value.trim() || 'mentor@brototype.com';
   localStorage.setItem('mentor_email', mentorEmail);
@@ -466,7 +479,7 @@ function sendMailtoEmail() {
 
   const mailtoUrl = `mailto:${encodeURIComponent(mentorEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.open(mailtoUrl, '_blank');
-  showToast('Opening email client...', 'info');
+  showToast('Opening system mail app...', 'info');
 }
 
 function copyReportToClipboard() {
@@ -594,6 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Mentor Email Modal
   document.getElementById('send-report-btn').addEventListener('click', openMentorEmailModal);
   document.getElementById('close-email-modal').addEventListener('click', closeMentorEmailModal);
+  document.getElementById('open-gmail-btn').addEventListener('click', sendGmailEmail);
   document.getElementById('open-mailto-btn').addEventListener('click', sendMailtoEmail);
   document.getElementById('copy-report-btn').addEventListener('click', copyReportToClipboard);
   document.getElementById('config-mentor-btn').addEventListener('click', openMentorEmailModal);
