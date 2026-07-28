@@ -351,12 +351,26 @@ function setCustomPomoMinutes(mins) {
 function adjustPomoSeconds(deltaSeconds) {
   let newTime = state.pomo.timeLeft + deltaSeconds;
   if (newTime < 60) newTime = 60; // Minimum 1 min
-  if (newTime > 7200) newTime = 7200; // Maximum 120 mins
+  if (newTime > 10800) newTime = 10800; // Maximum 3 hours (10800s)
   
   state.pomo.timeLeft = newTime;
   state.pomo.duration = newTime;
   updateTimerDisplay();
-  showToast(`Timer adjusted: ${Math.floor(newTime / 60)} mins`, 'info');
+
+  const totalMins = Math.floor(newTime / 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+
+  let timeStr = "";
+  if (hrs > 0 && mins > 0) {
+    timeStr = `${hrs} hr ${mins} mins`;
+  } else if (hrs > 0) {
+    timeStr = `${hrs} hr${hrs > 1 ? 's' : ''}`;
+  } else {
+    timeStr = `${mins} mins`;
+  }
+
+  showToast(`Timer set to ${timeStr}`, 'info');
 }
 
 function resetPomodoro() {
