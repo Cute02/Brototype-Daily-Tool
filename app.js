@@ -339,13 +339,33 @@ function togglePomodoro() {
   }
 }
 
+function setCustomPomoMinutes(mins) {
+  const seconds = mins * 60;
+  state.pomo.duration = seconds;
+  state.pomo.timeLeft = seconds;
+  pausePomodoro();
+  updateTimerDisplay();
+  updatePomoToggleButton('▶ Start Focus', 'btn-success');
+}
+
+function adjustPomoSeconds(deltaSeconds) {
+  let newTime = state.pomo.timeLeft + deltaSeconds;
+  if (newTime < 60) newTime = 60; // Minimum 1 min
+  if (newTime > 7200) newTime = 7200; // Maximum 120 mins
+  
+  state.pomo.timeLeft = newTime;
+  state.pomo.duration = newTime;
+  updateTimerDisplay();
+  showToast(`Timer adjusted: ${Math.floor(newTime / 60)} mins`, 'info');
+}
+
 function resetPomodoro() {
   state.pomo.isRunning = false;
   if (state.pomo.timerId) {
     clearInterval(state.pomo.timerId);
     state.pomo.timerId = null;
   }
-  state.pomo.timeLeft = POMO_DURATIONS[state.pomo.mode];
+  state.pomo.timeLeft = state.pomo.duration || 1500;
   updateTimerDisplay();
   updatePomoToggleButton('▶ Start Focus', 'btn-success');
 }
@@ -529,15 +549,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('pomo-reset-btn').addEventListener('click', resetPomodoro);
 
+  // Preset Multiples Dropdown (5m, 10m, 15m, 20m, 25m, 30m, 40m, 45m, 50m, 60m)
+  const presetSelect = document.getElementById('pomo-preset-select');
+  if (presetSelect) {
+    presetSelect.addEventListener('change', (e) => {
+      setCustomPomoMinutes(parseInt(e.target.value));
+    });
+  }
+
+  // Quick Mode buttons
   document.querySelectorAll('.pomo-mode-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       document.querySelectorAll('.pomo-mode-btn').forEach(b => b.classList.remove('active'));
       e.target.classList.add('active');
       
-      const mode = e.target.getAttribute('data-mode');
-      state.pomo.mode = mode;
-      document.getElementById('pomo-mode-badge').innerText = mode === 'work' ? 'Work Session' : (mode === 'shortBreak' ? 'Short Break' : 'Long Break');
-      resetPomodoro();
+      const mins = parseInt(e.target.getAttribute('data-mins') || '25');
+      if (presetSelect) presetSelect.value = mins;
+      setCustomPomoMinutes(mins);
+    });
+  });
+
+  // Adjust +/-5m and +/-10m buttons
+  document.querySelectorAll('.btn-adjust').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const delta = parseInt(e.target.getAttribute('data-adjust'));
+      adjustPomoSeconds(delta);
     });
   });
 

@@ -24,18 +24,6 @@
     "notes": "Updated daily log and logged task progress."
   },
   {
-    "id": 3,
-    "title": "LeetCode Daily Challenge - Dynamic Programming",
-    "category": "Problem Solving",
-    "status": "In Progress",
-    "priority": "Medium",
-    "duration": "1 hr",
-    "scheduled_time": "",
-    "created_at": "2026-07-28 09:30:00",
-    "updated_at": "2026-07-28 10:10:00",
-    "notes": "Solving memoization approach for 0/1 Knapsack variation."
-  },
-  {
     "id": 4,
     "title": "Domain Code Review & Task Refactoring",
     "category": "Code Review",
@@ -73,14 +61,14 @@
   },
   {
     "id": 7,
-    "title": "Matrix operations",
+    "title": "Maths: Matrix operations",
     "category": "Maths",
-    "status": "Pending",
+    "status": "Completed",
     "priority": "Medium",
-    "duration": "1 hr",
+    "duration": "2 hrs",
     "scheduled_time": "",
     "created_at": "2026-07-28 10:44:48",
-    "updated_at": "2026-07-28 10:44:48",
+    "updated_at": "2026-07-28 11:44:27",
     "notes": "Should Study the ML Applications of Matrix"
   }
 ]

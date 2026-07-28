@@ -90,9 +90,35 @@
             <span class="badge badge-info" id="pomo-mode-badge">Work Session</span>
           </div>
           <div class="pomo-modes">
-            <button class="pomo-mode-btn active" data-mode="work">25m Work</button>
-            <button class="pomo-mode-btn" data-mode="shortBreak">5m Break</button>
-            <button class="pomo-mode-btn" data-mode="longBreak">15m Break</button>
+            <button class="pomo-mode-btn active" data-mins="25">25m Work</button>
+            <button class="pomo-mode-btn" data-mins="5">5m Break</button>
+            <button class="pomo-mode-btn" data-mins="15">15m Break</button>
+          </div>
+
+          <!-- 5s and 10s Multiples & Time Adjusters -->
+          <div class="pomo-timer-options">
+            <div class="pomo-select-wrapper">
+              <label for="pomo-preset-select">Timer Duration:</label>
+              <select id="pomo-preset-select" class="select-sm">
+                <option value="5">⏱ 5 mins (5's multiple)</option>
+                <option value="10">⏱ 10 mins (10's multiple)</option>
+                <option value="15">⏱ 15 mins (5's multiple)</option>
+                <option value="20">⏱ 20 mins (10's multiple)</option>
+                <option value="25" selected>⏱ 25 mins (Default Work)</option>
+                <option value="30">⏱ 30 mins (10's multiple)</option>
+                <option value="40">⏱ 40 mins (10's multiple)</option>
+                <option value="45">⏱ 45 mins (5's multiple)</option>
+                <option value="50">⏱ 50 mins (10's multiple)</option>
+                <option value="60">⏱ 60 mins (1 hr)</option>
+              </select>
+            </div>
+
+            <div class="pomo-adjust-row">
+              <button class="btn-adjust" data-adjust="-600" title="Subtract 10 mins">-10m</button>
+              <button class="btn-adjust" data-adjust="-300" title="Subtract 5 mins">-5m</button>
+              <button class="btn-adjust" data-adjust="300" title="Add 5 mins">+5m</button>
+              <button class="btn-adjust" data-adjust="600" title="Add 10 mins">+10m</button>
+            </div>
           </div>
 
           <div class="timer-display" id="timer-display">25:00</div>
