@@ -6,7 +6,33 @@ import pytest
 from src.models import TaskStatus, TaskPriority
 
 
+import threading
+import time
+import socketserver
+from server import CustomHTTPRequestHandler
+
 BASE_URL = "http://localhost:8000/api/tasks"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def ensure_server_running():
+    try:
+        req = urllib.request.Request(BASE_URL)
+        with urllib.request.urlopen(req, timeout=1):
+            yield
+            return
+    except Exception:
+        pass
+
+    socketserver.TCPServer.allow_reuse_address = True
+    httpd = socketserver.TCPServer(("", 8000), CustomHTTPRequestHandler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(0.5)
+    yield
+    httpd.shutdown()
+    httpd.server_close()
+
 
 
 def test_api_get_tasks():
