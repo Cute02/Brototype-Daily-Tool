@@ -61,28 +61,115 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 3500);
 }
 
-// Cute Confetti Particle Burst Generator
-function triggerConfettiBurst(x, y) {
-  const emojis = ['✨', '🌸', '💫', '⭐', '💖', '🎊', '🎉', '🌟'];
-  const particleCount = 16;
-  for (let i = 0; i < particleCount; i++) {
-    const el = document.createElement('div');
-    el.className = 'confetti-particle';
-    el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
-    el.style.left = `${x || window.innerWidth / 2}px`;
-    el.style.top = `${y || window.innerHeight / 2}px`;
-
-    const angle = (i / particleCount) * 2 * Math.PI + (Math.random() * 0.4 - 0.2);
-    const distance = 45 + Math.random() * 70;
-    const dx = Math.cos(angle) * distance;
-    const dy = Math.sin(angle) * distance - 25;
-
-    el.style.setProperty('--dx', `${dx}px`);
-    el.style.setProperty('--dy', `${dy}px`);
-
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 800);
+// High-Performance 60fps Canvas Confetti Engine
+class ConfettiEngine {
+  constructor() {
+    this.canvas = document.getElementById('confetti-canvas');
+    if (!this.canvas) return;
+    this.ctx = this.canvas.getContext('2d');
+    this.particles = [];
+    this.animating = false;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
   }
+
+  resize() {
+    if (!this.canvas) return;
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  }
+
+  burst(x, y, count = 40) {
+    if (!this.canvas) {
+      this.canvas = document.getElementById('confetti-canvas');
+      if (this.canvas) this.ctx = this.canvas.getContext('2d');
+    }
+    if (!this.canvas || !this.ctx) return;
+    this.resize();
+
+    const colors = ['#6366f1', '#a855f7', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#f43f5e', '#38bdf8'];
+    const emojis = ['✨', '⭐', '🌸', '💖', '🎉', '🌟', '💫', '🎊'];
+
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 4 + Math.random() * 9;
+      const isEmoji = Math.random() < 0.35;
+      
+      this.particles.push({
+        x: x || window.innerWidth / 2,
+        y: y || window.innerHeight / 2,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 3,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        emoji: isEmoji ? emojis[Math.floor(Math.random() * emojis.length)] : null,
+        size: isEmoji ? (18 + Math.random() * 10) : (6 + Math.random() * 6),
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.2,
+        alpha: 1,
+        life: 1,
+        decay: 0.012 + Math.random() * 0.015
+      });
+    }
+
+    if (!this.animating) {
+      this.animating = true;
+      requestAnimationFrame(() => this.loop());
+    }
+  }
+
+  loop() {
+    if (!this.canvas || !this.ctx) return;
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.25; // gravity
+      p.vx *= 0.98; // drag
+      p.rotation += p.rotSpeed;
+      p.life -= p.decay;
+      p.alpha = Math.max(0, p.life);
+
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+
+      this.ctx.save();
+      this.ctx.globalAlpha = p.alpha;
+      this.ctx.translate(p.x, p.y);
+      this.ctx.rotate(p.rotation);
+
+      if (p.emoji) {
+        this.ctx.font = `${p.size}px sans-serif`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(p.emoji, 0, 0);
+      } else {
+        this.ctx.fillStyle = p.color;
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+
+      this.ctx.restore();
+    }
+
+    if (this.particles.length > 0) {
+      requestAnimationFrame(() => this.loop());
+    } else {
+      this.animating = false;
+    }
+  }
+}
+
+let globalConfettiEngine = null;
+function triggerConfettiBurst(x, y, count = 40) {
+  if (!globalConfettiEngine) {
+    globalConfettiEngine = new ConfettiEngine();
+  }
+  globalConfettiEngine.burst(x, y, count);
 }
 
 // Auth Headers Helper
