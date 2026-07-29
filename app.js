@@ -61,6 +61,30 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), 3500);
 }
 
+// Cute Confetti Particle Burst Generator
+function triggerConfettiBurst(x, y) {
+  const emojis = ['✨', '🌸', '💫', '⭐', '💖', '🎊', '🎉', '🌟'];
+  const particleCount = 16;
+  for (let i = 0; i < particleCount; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-particle';
+    el.innerText = emojis[Math.floor(Math.random() * emojis.length)];
+    el.style.left = `${x || window.innerWidth / 2}px`;
+    el.style.top = `${y || window.innerHeight / 2}px`;
+
+    const angle = (i / particleCount) * 2 * Math.PI + (Math.random() * 0.4 - 0.2);
+    const distance = 45 + Math.random() * 70;
+    const dx = Math.cos(angle) * distance;
+    const dy = Math.sin(angle) * distance - 25;
+
+    el.style.setProperty('--dx', `${dx}px`);
+    el.style.setProperty('--dy', `${dy}px`);
+
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 800);
+  }
+}
+
 // Auth Headers Helper
 function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
@@ -432,10 +456,17 @@ function renderTodoList() {
     item.querySelector('.task-checkbox').addEventListener('click', (e) => {
       const current = e.currentTarget.getAttribute('data-current');
       const nextStatus = current === 'Completed' ? 'Pending' : 'Completed';
+      if (nextStatus === 'Completed') {
+        triggerConfettiBurst(e.clientX, e.clientY);
+      }
       updateTaskStatus(task.id, nextStatus);
     });
 
     item.querySelector('.status-select').addEventListener('change', (e) => {
+      if (e.target.value === 'Completed') {
+        const rect = e.target.getBoundingClientRect();
+        triggerConfettiBurst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }
       updateTaskStatus(task.id, e.target.value);
     });
 
@@ -500,6 +531,8 @@ function updatePomoToggleButton(text, className) {
 function startPomodoro() {
   if (state.pomo.isRunning) return;
   state.pomo.isRunning = true;
+  const pomoCard = document.querySelector('.pomodoro-card');
+  if (pomoCard) pomoCard.classList.add('active-timer');
   updatePomoToggleButton('⏸ Pause', 'btn-warning');
 
   state.pomo.timerId = setInterval(() => {
@@ -509,6 +542,7 @@ function startPomodoro() {
     } else {
       resetPomodoro();
       playChime();
+      triggerConfettiBurst(window.innerWidth / 2, window.innerHeight / 3);
       showToast('🎉 Pomodoro Session Completed!', 'success');
 
       const taskId = document.getElementById('pomo-task-select').value;
@@ -523,6 +557,8 @@ function startPomodoro() {
 
 function pausePomodoro() {
   state.pomo.isRunning = false;
+  const pomoCard = document.querySelector('.pomodoro-card');
+  if (pomoCard) pomoCard.classList.remove('active-timer');
   if (state.pomo.timerId) {
     clearInterval(state.pomo.timerId);
     state.pomo.timerId = null;
@@ -574,6 +610,8 @@ function adjustPomoSeconds(deltaSeconds) {
 
 function resetPomodoro() {
   state.pomo.isRunning = false;
+  const pomoCard = document.querySelector('.pomodoro-card');
+  if (pomoCard) pomoCard.classList.remove('active-timer');
   if (state.pomo.timerId) {
     clearInterval(state.pomo.timerId);
     state.pomo.timerId = null;
