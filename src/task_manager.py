@@ -143,13 +143,19 @@ class TaskManager:
         """Filter and sort tasks based on criteria."""
         filtered = list(self.tasks)
 
-        if status:
-            norm_status = TaskStatus.normalize(status)
-            filtered = [t for t in filtered if t.status == norm_status]
+        if status and status.upper() != "ALL" and status.lower() not in ("null", "undefined", "none", ""):
+            try:
+                norm_status = TaskStatus.normalize(status)
+                filtered = [t for t in filtered if t.status == norm_status]
+            except ValueError:
+                pass
 
-        if priority:
-            norm_priority = TaskPriority.normalize(priority)
-            filtered = [t for t in filtered if t.priority == norm_priority]
+        if priority and priority.upper() != "ALL" and priority.lower() not in ("null", "undefined", "none", ""):
+            try:
+                norm_priority = TaskPriority.normalize(priority)
+                filtered = [t for t in filtered if t.priority == norm_priority]
+            except ValueError:
+                pass
 
         if category:
             cat_lower = category.strip().lower()

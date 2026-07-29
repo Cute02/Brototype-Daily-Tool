@@ -73,9 +73,20 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/tasks":
             query_params = urllib.parse.parse_qs(parsed_url.query)
             status = query_params.get("status", [None])[0]
+            if status and (status.upper() == "ALL" or status.lower() in ("null", "undefined", "none", "")):
+                status = None
+
             priority = query_params.get("priority", [None])[0]
+            if priority and (priority.upper() == "ALL" or priority.lower() in ("null", "undefined", "none", "")):
+                priority = None
+
             search = query_params.get("search", [None])[0]
+            if search and search.lower() in ("null", "undefined", ""):
+                search = None
+
             sort_by = query_params.get("sort_by", ["priority"])[0]
+            if not sort_by or sort_by.lower() in ("null", "undefined", ""):
+                sort_by = "priority"
 
             mgr = self._get_task_manager()
             mgr.refresh()
@@ -244,9 +255,13 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self._send_error_json("Endpoint not found", status=404)
 
 
+class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def run_server():
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), CustomHTTPRequestHandler) as httpd:
+    with ThreadingTCPServer(("", PORT), CustomHTTPRequestHandler) as httpd:
         print(f"[Server] Brototype Daily Task Server running at http://localhost:{PORT}")
         try:
             httpd.serve_forever()

@@ -113,11 +113,18 @@ async function addTask(taskData) {
 
 async function updateTaskStatus(id, status, notes = null) {
   try {
+    const payload = { status };
+    if (notes !== null) payload.notes = notes;
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ status, notes })
+      body: JSON.stringify(payload)
     });
+    if (res.status === 404) {
+      showToast(`Task #${id} not found in your task list. Refreshing...`, 'warning');
+      await fetchTasks();
+      return;
+    }
     if (!res.ok) throw new Error("Failed to update status");
     showToast(`✓ Status updated to ${status}`, 'success');
     await fetchTasks();
@@ -133,6 +140,11 @@ async function updateTaskFullDetails(id, details) {
       headers: getAuthHeaders(),
       body: JSON.stringify(details)
     });
+    if (res.status === 404) {
+      showToast(`Task #${id} not found. Refreshing...`, 'warning');
+      await fetchTasks();
+      return;
+    }
     if (!res.ok) throw new Error("Failed to update task");
     showToast('✓ Task updated successfully!', 'success');
     await fetchTasks();
@@ -148,6 +160,11 @@ async function deleteTask(id) {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
+    if (res.status === 404) {
+      showToast(`Task #${id} not found. Refreshing...`, 'warning');
+      await fetchTasks();
+      return;
+    }
     if (!res.ok) throw new Error("Failed to delete task");
     showToast('Task deleted', 'info');
     await fetchTasks();

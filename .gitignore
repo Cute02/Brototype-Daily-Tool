@@ -6,3 +6,6 @@ __pycache__/
 *.tmp
 *.bak
 .DS_Store
+users.json
+daily_tasks_*.json
+
