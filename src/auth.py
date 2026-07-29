@@ -52,6 +52,7 @@ class AuthManager:
             return False
 
     def _find_user_key(self, identifier: str) -> Optional[str]:
+        self.users = self._load_users()
         identifier = identifier.strip().lower()
         if not identifier:
             return None

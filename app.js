@@ -719,6 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('auth-tab-register').addEventListener('click', () => switchAuthTab('register'));
 
   // Password vs OTP Mode Toggles
+  let activeAuthMode = 'password';
   const modePwdBtn = document.getElementById('mode-password-btn');
   const modeOtpBtn = document.getElementById('mode-otp-btn');
   const pwdContainer = document.getElementById('password-login-container');
@@ -726,12 +727,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (modePwdBtn && modeOtpBtn) {
     modePwdBtn.addEventListener('click', () => {
+      activeAuthMode = 'password';
       modePwdBtn.classList.add('active');
       modeOtpBtn.classList.remove('active');
       pwdContainer.style.display = 'block';
       otpContainer.style.display = 'none';
     });
     modeOtpBtn.addEventListener('click', () => {
+      activeAuthMode = 'otp';
       modeOtpBtn.classList.add('active');
       modePwdBtn.classList.remove('active');
       pwdContainer.style.display = 'none';
@@ -742,7 +745,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // OTP Request & Verification Handlers
   const reqOtpBtn = document.getElementById('request-otp-btn');
   if (reqOtpBtn) {
-    reqOtpBtn.addEventListener('click', () => {
+    reqOtpBtn.addEventListener('click', (e) => {
+      e.preventDefault();
       const identifier = document.getElementById('login-username').value.trim();
       requestOTP(identifier);
     });
@@ -750,7 +754,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const verifyOtpBtn = document.getElementById('verify-otp-btn');
   if (verifyOtpBtn) {
-    verifyOtpBtn.addEventListener('click', () => {
+    verifyOtpBtn.addEventListener('click', (e) => {
+      e.preventDefault();
       const identifier = document.getElementById('login-username').value.trim();
       const otp = document.getElementById('login-otp').value.trim();
       verifyOTP(identifier, otp);
@@ -760,8 +765,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const identifier = document.getElementById('login-username').value.trim();
-    const p = document.getElementById('login-password').value;
-    loginUser(identifier, p);
+    if (activeAuthMode === 'otp') {
+      const otp = document.getElementById('login-otp').value.trim();
+      verifyOTP(identifier, otp);
+    } else {
+      const p = document.getElementById('login-password').value;
+      loginUser(identifier, p);
+    }
   });
 
   document.getElementById('register-form').addEventListener('submit', (e) => {
