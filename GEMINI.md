@@ -75,3 +75,6 @@ The application follows a clean 3-Tier Layered Architecture:
 ## Rules
 1. Don't take screenshots
 2. Commit every change to git and push with appropriate commit messages
+
+## Site URL link(Update it here)
+-  http://localhost:8000

@@ -1,26 +1,62 @@
 [
   {
     "id": 1,
-    "title": "Statistics",
+    "title": "Linear Algebra Fundamentals",
     "category": "Maths",
     "status": "Completed",
-    "priority": "High",
-    "duration": "30 mins",
-    "scheduled_time": "",
-    "created_at": "2026-07-28 13:21:40",
-    "updated_at": "2026-07-28 13:25:39",
-    "notes": ""
-  },
-  {
-    "id": 2,
-    "title": "Probability",
-    "category": "Maths",
-    "status": "Pending",
     "priority": "Medium",
     "duration": "1 hr",
     "scheduled_time": "",
-    "created_at": "2026-07-28 13:22:19",
-    "updated_at": "2026-07-28 13:25:42",
-    "notes": ""
+    "created_at": "2026-07-29 12:37:07",
+    "updated_at": "2026-07-29 16:19:09",
+    "notes": "Scalars\nVectors\nMatrices\nMatrix operations\nMatrix multiplication"
+  },
+  {
+    "id": 2,
+    "title": "Vector Mathematics",
+    "category": "Maths",
+    "status": "Completed",
+    "priority": "Medium",
+    "duration": "1 hr",
+    "scheduled_time": "",
+    "created_at": "2026-07-29 12:38:08",
+    "updated_at": "2026-07-30 09:03:22",
+    "notes": "Vector representation\nMagnitude & Direction \nDot product \nSimilarity concepts"
+  },
+  {
+    "id": 3,
+    "title": "Matrix Applications in ML",
+    "category": "Maths",
+    "status": "Completed",
+    "priority": "Medium",
+    "duration": "2 hrs",
+    "scheduled_time": "",
+    "created_at": "2026-07-29 12:39:38",
+    "updated_at": "2026-07-30 09:03:24",
+    "notes": "Data representation\nFeature matrices\nTransformations\nMatrix-based computations\nReal-world ML applications"
+  },
+  {
+    "id": 4,
+    "title": "Calculus Intuition",
+    "category": "Maths",
+    "status": "Pending",
+    "priority": "Medium",
+    "duration": "2 hrs",
+    "scheduled_time": "",
+    "created_at": "2026-07-29 12:40:32",
+    "updated_at": "2026-07-30 09:03:48",
+    "notes": "Functions and rates of change\nSlopes Derivatives (conceptual understanding) \nOptimization intuition\nWhy calculus matters in ML"
+  },
+  {
+    "id": 5,
+    "title": "Optimization Fundamentals",
+    "category": "Maths",
+    "status": "Blocked",
+    "priority": "Medium",
+    "duration": "2 hrs",
+    "scheduled_time": "",
+    "created_at": "2026-07-29 12:42:10",
+    "updated_at": "2026-07-29 12:42:18",
+    "notes": "Cost functions\nError minimization\nGradient intuition\nOptimization workflows\nLearning through iteration"
   }
 ]

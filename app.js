@@ -1004,4 +1004,220 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('open-mailto-btn').addEventListener('click', sendMailtoEmail);
   document.getElementById('copy-report-btn').addEventListener('click', copyReportToClipboard);
   document.getElementById('config-mentor-btn').addEventListener('click', openMentorEmailModal);
+
+  // PDF Import Handlers
+  const importPdfBtn = document.getElementById('import-pdf-btn');
+  if (importPdfBtn) importPdfBtn.addEventListener('click', openPdfModal);
+
+  const closePdfBtn = document.getElementById('close-pdf-modal');
+  if (closePdfBtn) closePdfBtn.addEventListener('click', closePdfModal);
+
+  const cancelPdfBtn = document.getElementById('cancel-pdf-modal');
+  if (cancelPdfBtn) cancelPdfBtn.addEventListener('click', closePdfModal);
+
+  const dropZone = document.getElementById('pdf-drop-zone');
+  const fileInput = document.getElementById('pdf-file-input');
+
+  if (dropZone && fileInput) {
+    dropZone.addEventListener('click', () => fileInput.click());
+    
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handlePdfFileSelect(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handlePdfFileSelect(e.target.files[0]);
+      }
+    });
+  }
+
+  const selectAllBtn = document.getElementById('pdf-select-all-btn');
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.pdf-task-checkbox').forEach(cb => cb.checked = true);
+    });
+  }
+
+  const deselectAllBtn = document.getElementById('pdf-deselect-all-btn');
+  if (deselectAllBtn) {
+    deselectAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('.pdf-task-checkbox').forEach(cb => cb.checked = false);
+    });
+  }
+
+  const confirmImportBtn = document.getElementById('confirm-import-tasks-btn');
+  if (confirmImportBtn) confirmImportBtn.addEventListener('click', confirmBatchImportTasks);
 });
+
+// PDF Syllabus Import Functions
+let extractedPdfTasks = [];
+
+function openPdfModal() {
+  extractedPdfTasks = [];
+  document.getElementById('pdf-file-input').value = '';
+  document.getElementById('pdf-preview-container').style.display = 'none';
+  document.getElementById('pdf-modal-footer').style.display = 'none';
+  document.getElementById('pdf-parsing-spinner').style.display = 'none';
+  document.getElementById('pdf-drop-zone').style.display = 'block';
+  document.getElementById('pdf-import-modal').classList.add('active');
+  document.getElementById('pdf-import-modal').style.display = 'flex';
+}
+
+function closePdfModal() {
+  document.getElementById('pdf-import-modal').classList.remove('active');
+  document.getElementById('pdf-import-modal').style.display = 'none';
+}
+
+function handlePdfFileSelect(file) {
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Please select a valid .pdf file', 'error');
+    return;
+  }
+
+  document.getElementById('pdf-drop-zone').style.display = 'none';
+  document.getElementById('pdf-parsing-spinner').style.display = 'block';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const arrayBuffer = e.target.result;
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64Str = btoa(binary);
+
+    fetch('/api/pdf/import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        pdf_base64: base64Str
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('pdf-parsing-spinner').style.display = 'none';
+      if (data.success && data.tasks && data.tasks.length > 0) {
+        extractedPdfTasks = data.tasks;
+        renderPdfTasksPreview();
+        showToast(`AI extracted ${data.tasks.length} topics from ${file.name}`, 'success');
+      } else {
+        document.getElementById('pdf-drop-zone').style.display = 'block';
+        showToast(data.error || 'Failed to extract topics from PDF', 'error');
+      }
+    })
+    .catch(err => {
+      document.getElementById('pdf-parsing-spinner').style.display = 'none';
+      document.getElementById('pdf-drop-zone').style.display = 'block';
+      showToast('Error uploading PDF: ' + err.message, 'error');
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderPdfTasksPreview() {
+  const container = document.getElementById('pdf-task-preview-list');
+  container.innerHTML = '';
+
+  document.getElementById('pdf-extracted-count').textContent = extractedPdfTasks.length;
+
+  extractedPdfTasks.forEach((task, idx) => {
+    const item = document.createElement('div');
+    item.className = 'pdf-preview-item';
+    item.innerHTML = `
+      <input type="checkbox" class="pdf-task-checkbox" data-idx="${idx}" checked>
+      <div class="pdf-preview-info">
+        <input type="text" class="pdf-preview-title-input" id="pdf-title-${idx}" value="${escapeHtml(task.title)}">
+        <div class="pdf-preview-meta">
+          <span class="badge badge-secondary" style="font-size: 0.7rem;">${escapeHtml(task.category)}</span>
+          <label style="color: var(--text-muted); font-size: 0.75rem;">Priority:</label>
+          <select class="pdf-preview-select" id="pdf-prio-${idx}">
+            <option value="High" ${task.priority === 'High' ? 'selected' : ''}>🔴 High</option>
+            <option value="Medium" ${task.priority === 'Medium' ? 'selected' : ''}>🟡 Medium</option>
+            <option value="Low" ${task.priority === 'Low' ? 'selected' : ''}>🔵 Low</option>
+          </select>
+          <label style="color: var(--text-muted); font-size: 0.75rem;">Duration:</label>
+          <select class="pdf-preview-select" id="pdf-dur-${idx}">
+            <option value="30 mins" ${task.duration === '30 mins' ? 'selected' : ''}>⚡ 30 mins</option>
+            <option value="1 hr" ${task.duration === '1 hr' ? 'selected' : ''}>⏱️ 1 hr</option>
+            <option value="2 hrs" ${task.duration === '2 hrs' ? 'selected' : ''}>⏳ 2 hrs</option>
+            <option value="3 hrs" ${task.duration === '3 hrs' ? 'selected' : ''}>🎯 3 hrs</option>
+          </select>
+        </div>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+
+  document.getElementById('pdf-preview-container').style.display = 'block';
+  document.getElementById('pdf-modal-footer').style.display = 'flex';
+}
+
+function confirmBatchImportTasks() {
+  const selectedTasks = [];
+  const checkboxes = document.querySelectorAll('.pdf-task-checkbox');
+
+  checkboxes.forEach(cb => {
+    if (cb.checked) {
+      const idx = parseInt(cb.getAttribute('data-idx'));
+      const original = extractedPdfTasks[idx];
+      const editedTitle = document.getElementById(`pdf-title-${idx}`).value.trim();
+      const editedPriority = document.getElementById(`pdf-prio-${idx}`).value;
+      const editedDuration = document.getElementById(`pdf-dur-${idx}`).value;
+
+      if (editedTitle) {
+        selectedTasks.push({
+          ...original,
+          title: editedTitle,
+          priority: editedPriority,
+          duration: editedDuration
+        });
+      }
+    }
+  });
+
+  if (selectedTasks.length === 0) {
+    showToast('Please select at least one topic to import', 'warning');
+    return;
+  }
+
+  fetch('/api/tasks/batch', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({ tasks: selectedTasks })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      showToast(`✨ Successfully imported ${data.created_count} tasks!`, 'success');
+      closePdfModal();
+      fetchTasks();
+    } else {
+      showToast(data.error || 'Batch import failed', 'error');
+    }
+  })
+  .catch(err => {
+    showToast('Failed to import tasks: ' + err.message, 'error');
+  });
+}

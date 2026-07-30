@@ -3,12 +3,14 @@ import http.server
 import socketserver
 import json
 import re
+import base64
 import urllib.parse
 from typing import Optional
 from pathlib import Path
 from src.auth import AuthManager
 from src.storage import StorageManager
 from src.task_manager import TaskManager
+from src.pdf_parser import parse_pdf_to_tasks
 
 PORT = 8000
 DIRECTORY = Path(__file__).parent.resolve()
@@ -203,6 +205,44 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     notes=notes
                 )
                 self._send_json({"success": True, "task": new_task.to_dict()}, status=201)
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
+            return
+
+        if self.path == "/api/pdf/import":
+            try:
+                filename = data.get("filename", "module.pdf") if isinstance(data, dict) else "module.pdf"
+                pdf_bytes = b""
+                if isinstance(data, dict) and "pdf_base64" in data:
+                    pdf_bytes = base64.b64decode(data["pdf_base64"])
+                else:
+                    pdf_bytes = body
+
+                candidate_tasks = parse_pdf_to_tasks(pdf_bytes, filename=filename)
+                self._send_json({
+                    "success": True,
+                    "filename": filename,
+                    "count": len(candidate_tasks),
+                    "tasks": candidate_tasks
+                })
+            except Exception as e:
+                self._send_error_json(f"Failed to parse PDF module: {str(e)}", status=400)
+            return
+
+        if self.path == "/api/tasks/batch":
+            try:
+                tasks_data = data.get("tasks", []) if isinstance(data, dict) else []
+                if not isinstance(tasks_data, list) or not tasks_data:
+                    raise ValueError("No tasks provided for batch import.")
+
+                mgr = self._get_task_manager()
+                mgr.refresh()
+                created = mgr.add_tasks_batch(tasks_data)
+                self._send_json({
+                    "success": True,
+                    "created_count": len(created),
+                    "tasks": [t.to_dict() for t in created]
+                }, status=201)
             except Exception as e:
                 self._send_error_json(str(e), status=400)
             return

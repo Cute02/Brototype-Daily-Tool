@@ -55,6 +55,40 @@ class TaskManager:
         self.save()
         return new_task
 
+    def add_tasks_batch(self, tasks_data: List[Dict[str, Any]]) -> List[Task]:
+        """Batch insert multiple tasks and persist atomically once."""
+        created_tasks: List[Task] = []
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for item in tasks_data:
+            title = str(item.get("title", "")).strip()
+            if not title:
+                continue
+            task_id = self._get_next_id()
+            category = str(item.get("category", "Module Import")).strip() or "Module Import"
+            priority = TaskPriority.normalize(str(item.get("priority", TaskPriority.MEDIUM.value)))
+            duration = str(item.get("duration", "1 hr")).strip() or "1 hr"
+            notes = str(item.get("notes", "")).strip()
+            status = TaskStatus.normalize(str(item.get("status", TaskStatus.PENDING.value)))
+            scheduled_time = str(item.get("scheduled_time", "")).strip()
+
+            new_task = Task(
+                id=task_id,
+                title=title,
+                category=category,
+                status=status,
+                priority=priority,
+                duration=duration,
+                scheduled_time=scheduled_time,
+                created_at=now,
+                updated_at=now,
+                notes=notes,
+            )
+            self.tasks.append(new_task)
+            created_tasks.append(new_task)
+        if created_tasks:
+            self.save()
+        return created_tasks
+
     def get_task_by_id(self, task_id: int) -> Optional[Task]:
         """Find task by its unique ID."""
         for task in self.tasks:
