@@ -27,6 +27,15 @@ const POMO_DURATIONS = {
   longBreak: 900
 };
 
+// Auth Header Helper
+function getAuthHeaders() {
+  const token = state.authToken || localStorage.getItem('auth_token');
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+  return {};
+}
+
 // Web Audio Chime Generator
 function playChime() {
   try {
@@ -1277,9 +1286,15 @@ function confirmBatchImportTasks() {
     if (cb.checked) {
       const idx = parseInt(cb.getAttribute('data-idx'));
       const original = extractedPdfTasks[idx];
-      const editedTitle = document.getElementById(`pdf-title-${idx}`).value.trim();
-      const editedPriority = document.getElementById(`pdf-prio-${idx}`).value;
-      const editedDuration = document.getElementById(`pdf-dur-${idx}`).value;
+      if (!original) return;
+
+      const titleEl = document.getElementById(`pdf-title-${idx}`);
+      const prioEl = document.getElementById(`pdf-prio-${idx}`);
+      const durEl = document.getElementById(`pdf-dur-${idx}`);
+
+      const editedTitle = titleEl ? titleEl.value.trim() : original.title;
+      const editedPriority = prioEl ? prioEl.value : original.priority;
+      const editedDuration = durEl ? durEl.value : original.duration;
 
       if (editedTitle) {
         selectedTasks.push({
