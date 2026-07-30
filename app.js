@@ -1067,25 +1067,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const confirmImportBtn = document.getElementById('confirm-import-tasks-btn');
   if (confirmImportBtn) confirmImportBtn.addEventListener('click', confirmBatchImportTasks);
+
+  const pdfModalOverlay = document.getElementById('pdf-import-modal');
+  if (pdfModalOverlay) {
+    pdfModalOverlay.addEventListener('click', (e) => {
+      if (e.target === pdfModalOverlay) {
+        closePdfModal(e);
+      }
+    });
+  }
 });
 
 // PDF Syllabus Import Functions
 let extractedPdfTasks = [];
 
-function openPdfModal() {
+function openPdfModal(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
   extractedPdfTasks = [];
-  document.getElementById('pdf-file-input').value = '';
-  document.getElementById('pdf-preview-container').style.display = 'none';
-  document.getElementById('pdf-modal-footer').style.display = 'none';
-  document.getElementById('pdf-parsing-spinner').style.display = 'none';
-  document.getElementById('pdf-drop-zone').style.display = 'block';
-  document.getElementById('pdf-import-modal').classList.add('active');
-  document.getElementById('pdf-import-modal').style.display = 'flex';
+  const fileInput = document.getElementById('pdf-file-input');
+  if (fileInput) fileInput.value = '';
+  const preview = document.getElementById('pdf-preview-container');
+  if (preview) preview.style.display = 'none';
+  const footer = document.getElementById('pdf-modal-footer');
+  if (footer) footer.style.display = 'none';
+  const spinner = document.getElementById('pdf-parsing-spinner');
+  if (spinner) spinner.style.display = 'none';
+  const dropZone = document.getElementById('pdf-drop-zone');
+  if (dropZone) dropZone.style.display = 'block';
+
+  const modal = document.getElementById('pdf-import-modal');
+  if (modal) {
+    modal.classList.add('active');
+  }
 }
 
-function closePdfModal() {
-  document.getElementById('pdf-import-modal').classList.remove('active');
-  document.getElementById('pdf-import-modal').style.display = 'none';
+function closePdfModal(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const modal = document.getElementById('pdf-import-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
 }
 
 function handlePdfFileSelect(file) {
