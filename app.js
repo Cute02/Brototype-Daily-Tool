@@ -1098,6 +1098,13 @@ function openPdfModal(e) {
   const dropZone = document.getElementById('pdf-drop-zone');
   if (dropZone) dropZone.style.display = 'block';
 
+  // Set default start date input to today
+  const startDateInput = document.getElementById('pdf-start-date-input');
+  if (startDateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    startDateInput.value = today;
+  }
+
   const modal = document.getElementById('pdf-import-modal');
   if (modal) {
     modal.classList.add('active');
@@ -1172,32 +1179,90 @@ function renderPdfTasksPreview() {
 
   document.getElementById('pdf-extracted-count').textContent = extractedPdfTasks.length;
 
+  // Group tasks by category/module
+  const moduleGroups = {};
   extractedPdfTasks.forEach((task, idx) => {
-    const item = document.createElement('div');
-    item.className = 'pdf-preview-item';
-    item.innerHTML = `
-      <input type="checkbox" class="pdf-task-checkbox" data-idx="${idx}" checked>
-      <div class="pdf-preview-info">
-        <input type="text" class="pdf-preview-title-input" id="pdf-title-${idx}" value="${escapeHtml(task.title)}">
-        <div class="pdf-preview-meta">
-          <span class="badge badge-secondary" style="font-size: 0.7rem;">${escapeHtml(task.category)}</span>
-          <label style="color: var(--text-muted); font-size: 0.75rem;">Priority:</label>
-          <select class="pdf-preview-select" id="pdf-prio-${idx}">
-            <option value="High" ${task.priority === 'High' ? 'selected' : ''}>🔴 High</option>
-            <option value="Medium" ${task.priority === 'Medium' ? 'selected' : ''}>🟡 Medium</option>
-            <option value="Low" ${task.priority === 'Low' ? 'selected' : ''}>🔵 Low</option>
-          </select>
-          <label style="color: var(--text-muted); font-size: 0.75rem;">Duration:</label>
-          <select class="pdf-preview-select" id="pdf-dur-${idx}">
-            <option value="30 mins" ${task.duration === '30 mins' ? 'selected' : ''}>⚡ 30 mins</option>
-            <option value="1 hr" ${task.duration === '1 hr' ? 'selected' : ''}>⏱️ 1 hr</option>
-            <option value="2 hrs" ${task.duration === '2 hrs' ? 'selected' : ''}>⏳ 2 hrs</option>
-            <option value="3 hrs" ${task.duration === '3 hrs' ? 'selected' : ''}>🎯 3 hrs</option>
-          </select>
-        </div>
-      </div>
+    const mod = task.category || 'General Module';
+    if (!moduleGroups[mod]) moduleGroups[mod] = [];
+    moduleGroups[mod].push({ ...task, origIndex: idx });
+  });
+
+  Object.keys(moduleGroups).forEach((modName) => {
+    const groupTasks = moduleGroups[modName];
+
+    // Calculate total hours in module
+    let totalMins = 0;
+    groupTasks.forEach(t => {
+      if (t.duration.includes('30 min')) totalMins += 30;
+      else if (t.duration.includes('1 hr')) totalMins += 60;
+      else if (t.duration.includes('2 hr')) totalMins += 120;
+      else if (t.duration.includes('3 hr')) totalMins += 180;
+      else totalMins += 60;
+    });
+    const durationLabel = totalMins >= 60 ? `${(totalMins / 60).toFixed(1)} hrs` : `${totalMins} mins`;
+
+    const groupCard = document.createElement('div');
+    groupCard.className = 'module-group-card';
+
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'module-group-header';
+    groupHeader.innerHTML = `
+      <span class="module-toggle-arrow">▼</span>
+      <input type="checkbox" class="module-group-checkbox" checked style="width: 18px; height: 18px; accent-color: #6366f1; cursor: pointer;">
+      <span class="module-group-title">📂 ${escapeHtml(modName)}</span>
+      <span class="badge badge-secondary" style="font-size: 0.75rem;">${groupTasks.length} topics · ⏱️ ${durationLabel}</span>
     `;
-    container.appendChild(item);
+
+    const groupBody = document.createElement('div');
+    groupBody.className = 'module-group-body';
+
+    groupTasks.forEach((task) => {
+      const idx = task.origIndex;
+      const item = document.createElement('div');
+      item.className = 'pdf-preview-item';
+      item.innerHTML = `
+        <input type="checkbox" class="pdf-task-checkbox" data-idx="${idx}" checked>
+        <div class="pdf-preview-info">
+          <input type="text" class="pdf-preview-title-input" id="pdf-title-${idx}" value="${escapeHtml(task.title)}">
+          <div class="pdf-preview-meta">
+            <span class="badge badge-secondary" style="font-size: 0.7rem;">${escapeHtml(task.category)}</span>
+            <label style="color: var(--text-muted); font-size: 0.75rem;">Priority:</label>
+            <select class="pdf-preview-select" id="pdf-prio-${idx}">
+              <option value="High" ${task.priority === 'High' ? 'selected' : ''}>🔴 High</option>
+              <option value="Medium" ${task.priority === 'Medium' ? 'selected' : ''}>🟡 Medium</option>
+              <option value="Low" ${task.priority === 'Low' ? 'selected' : ''}>🔵 Low</option>
+            </select>
+            <label style="color: var(--text-muted); font-size: 0.75rem;">Duration:</label>
+            <select class="pdf-preview-select" id="pdf-dur-${idx}">
+              <option value="30 mins" ${task.duration === '30 mins' ? 'selected' : ''}>⚡ 30 mins</option>
+              <option value="1 hr" ${task.duration === '1 hr' ? 'selected' : ''}>⏱️ 1 hr</option>
+              <option value="2 hrs" ${task.duration === '2 hrs' ? 'selected' : ''}>⏳ 2 hrs</option>
+              <option value="3 hrs" ${task.duration === '3 hrs' ? 'selected' : ''}>🎯 3 hrs</option>
+            </select>
+          </div>
+        </div>
+      `;
+      groupBody.appendChild(item);
+    });
+
+    groupCard.appendChild(groupHeader);
+    groupCard.appendChild(groupBody);
+    container.appendChild(groupCard);
+
+    // Module header accordion toggle
+    groupHeader.addEventListener('click', (e) => {
+      if (e.target.classList.contains('module-group-checkbox')) return;
+      groupCard.classList.toggle('collapsed');
+    });
+
+    // Module checkbox batch toggle
+    const moduleCb = groupHeader.querySelector('.module-group-checkbox');
+    moduleCb.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      groupBody.querySelectorAll('.pdf-task-checkbox').forEach(cb => {
+        cb.checked = isChecked;
+      });
+    });
   });
 
   document.getElementById('pdf-preview-container').style.display = 'block';
@@ -1232,6 +1297,37 @@ function confirmBatchImportTasks() {
     return;
   }
 
+  // Pacing & Auto-Scheduling Calculation
+  const isAutoSchedule = document.getElementById('pdf-enable-schedule-cb')?.checked ?? true;
+  if (isAutoSchedule) {
+    const dailyTargetHours = parseFloat(document.getElementById('pdf-daily-hours-select')?.value || '2');
+    const startDateStr = document.getElementById('pdf-start-date-input')?.value;
+    
+    let currentDate = startDateStr ? new Date(startDateStr) : new Date();
+    if (isNaN(currentDate.getTime())) currentDate = new Date();
+
+    let currentDayAccumulatedHours = 0;
+    let dayCounter = 1;
+
+    selectedTasks.forEach((task) => {
+      let taskHours = 1.0;
+      if (task.duration.includes('30 min')) taskHours = 0.5;
+      else if (task.duration.includes('1 hr')) taskHours = 1.0;
+      else if (task.duration.includes('2 hr')) taskHours = 2.0;
+      else if (task.duration.includes('3 hr')) taskHours = 3.0;
+
+      if (currentDayAccumulatedHours + taskHours > dailyTargetHours && currentDayAccumulatedHours > 0) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        currentDayAccumulatedHours = 0;
+        dayCounter++;
+      }
+
+      const formattedDate = currentDate.toISOString().split('T')[0];
+      task.scheduled_time = `${formattedDate} (Day ${dayCounter})`;
+      currentDayAccumulatedHours += taskHours;
+    });
+  }
+
   fetch('/api/tasks/batch', {
     method: 'POST',
     headers: {
@@ -1243,7 +1339,7 @@ function confirmBatchImportTasks() {
   .then(res => res.json())
   .then(data => {
     if (data.success) {
-      showToast(`✨ Successfully imported ${data.created_count} tasks!`, 'success');
+      showToast(`✨ Imported ${data.created_count} tasks with auto-scheduled study roadmap!`, 'success');
       closePdfModal();
       fetchTasks();
     } else {

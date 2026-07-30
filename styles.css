@@ -964,4 +964,53 @@ body {
   font-size: 0.75rem;
 }
 
+/* Expandable Module Curriculum Tree */
+.module-group-card {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.module-group-card:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.module-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(30, 41, 59, 0.8);
+  cursor: pointer;
+  user-select: none;
+}
+
+.module-group-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+}
+
+.module-toggle-arrow {
+  font-size: 0.8rem;
+  transition: transform 0.25s ease;
+  color: var(--text-muted);
+}
+
+.module-group-card.collapsed .module-toggle-arrow {
+  transform: rotate(-90deg);
+}
+
+.module-group-card.collapsed .module-group-body {
+  display: none;
+}
+
+.module-group-body {
+  padding: 10px 12px 2px 12px;
+}
+
 
