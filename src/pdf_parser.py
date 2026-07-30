@@ -1,13 +1,53 @@
-"""PDF Parser and AI-Powered Topic Extraction Engine for Brototype Daily Tool."""
+"""Document Parser (PDF, Docx, Text, Google Drive, Web Links) & AI Topic Extraction Engine."""
 import io
 import re
-from typing import List, Dict, Any, Optional
+import zipfile
+import urllib.request
+import urllib.parse
+from typing import List, Dict, Any, Optional, Tuple
 
 try:
     import pypdf
     PYPDF_AVAILABLE = True
 except ImportError:
     PYPDF_AVAILABLE = False
+
+
+def fetch_bytes_from_url(url: str) -> Tuple[bytes, str]:
+    """Fetch raw document bytes from Google Drive, Google Docs, or HTTP URL."""
+    url = url.strip()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        raise ValueError("Invalid URL. Must start with http:// or https://")
+
+    filename = "downloaded_document"
+
+    # Transform Google Docs sharing URL into direct export link
+    gdoc_match = re.search(r"docs\.google\.com/document/d/([a-zA-Z0-9_-]+)", url)
+    if gdoc_match:
+        doc_id = gdoc_match.group(1)
+        url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
+        filename = f"Google_Doc_{doc_id[:8]}.txt"
+
+    # Transform Google Drive file link into direct download link
+    gdrive_match = re.search(r"drive\.google\.com/file/d/([a-zA-Z0-9_-]+)", url)
+    if gdrive_match:
+        file_id = gdrive_match.group(1)
+        url = f"https://drive.google.com/uc?id={file_id}&export=download"
+        filename = f"Google_Drive_{file_id[:8]}.pdf"
+
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    )
+    with urllib.request.urlopen(req, timeout=15) as response:
+        content_bytes = response.read()
+        cd_header = response.headers.get("Content-Disposition", "")
+        if "filename=" in cd_header:
+            match_fn = re.search(r'filename=["\']?([^"\';]+)["\']?', cd_header)
+            if match_fn:
+                filename = match_fn.group(1)
+
+    return content_bytes, filename
 
 
 def extract_raw_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -45,13 +85,50 @@ def extract_raw_text_from_pdf(pdf_bytes: bytes) -> str:
             if flat_blocks:
                 text = "\n".join(flat_blocks)
             else:
-                # Fallback: clean ASCII printable strings longer than 3 chars
                 printable_lines = re.findall(r"[A-Za-z0-9\s.,:\-_\(\)\/]{4,}", raw_str)
                 text = "\n".join(printable_lines)
         except Exception:
             text = ""
 
     return text.strip()
+
+
+def extract_raw_text_from_docx(docx_bytes: bytes) -> str:
+    """Extract raw text content from DOCX file binary stream."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(docx_bytes)) as zf:
+            xml_content = zf.read("word/document.xml").decode("utf-8", errors="ignore")
+            paragraphs = re.findall(r"<w:p\b[^>]*>(.*?)</w:p>", xml_content, re.DOTALL)
+            text_lines = []
+            for p in paragraphs:
+                texts = re.findall(r"<w:t\b[^>]*>(.*?)</w:t>", p, re.DOTALL)
+                full_p = "".join(texts).strip()
+                if full_p:
+                    text_lines.append(full_p)
+            return "\n".join(text_lines)
+    except Exception:
+        return ""
+
+
+def extract_text_from_bytes(file_bytes: bytes, filename: str = "") -> str:
+    """Extract text from PDF, DOCX, TXT, or MD files."""
+    fn_lower = filename.lower()
+    if fn_lower.endswith(".docx") or fn_lower.endswith(".doc"):
+        text = extract_raw_text_from_docx(file_bytes)
+        if text.strip():
+            return text
+
+    if fn_lower.endswith(".pdf") or file_bytes.startswith(b"%PDF"):
+        return extract_raw_text_from_pdf(file_bytes)
+
+    # Fallback to UTF-8 / latin-1 plain text / markdown text parsing
+    try:
+        return file_bytes.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        try:
+            return file_bytes.decode("latin-1", errors="ignore").strip()
+        except Exception:
+            return extract_raw_text_from_pdf(file_bytes)
 
 
 def infer_priority(topic_title: str, text_context: str) -> str:
@@ -82,7 +159,6 @@ def infer_duration(topic_title: str, text_context: str) -> str:
     """AI heuristic rule to assign duration (30 mins, 1 hr, 2 hrs, 3 hrs)."""
     combined = f"{topic_title} {text_context}".lower()
 
-    # Direct time pattern check (e.g. 30m, 30 mins, 1h, 2 hrs, 3 hours)
     match_mins = re.search(r"(\d+)\s*(?:mins?|minutes?|m\b)", combined)
     if match_mins:
         val = int(match_mins.group(1))
@@ -107,7 +183,6 @@ def infer_duration(topic_title: str, text_context: str) -> str:
         else:
             return "3 hrs"
 
-    # Context complexity heuristic
     if any(k in combined for k in ["project", "architecture", "building", "comprehensive", "full stack", "assessment"]):
         return "3 hrs"
     elif any(k in combined for k in ["advanced", "deep dive", "implement", "integration", "crud", "database"]):
@@ -119,17 +194,16 @@ def infer_duration(topic_title: str, text_context: str) -> str:
 
 
 def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, Any]]:
-    """Parse PDF binary content and return structured candidate tasks list."""
-    raw_text = extract_raw_text_from_pdf(pdf_bytes)
+    """Parse Document/PDF binary content and return structured candidate tasks list."""
+    raw_text = extract_text_from_bytes(pdf_bytes, filename=filename)
     if not raw_text:
-        # Return fallback task if PDF is empty/scanned image without OCR
-        fallback_title = f"Review Syllabus: {filename}" if filename else "Review Uploaded Module PDF"
+        fallback_title = f"Review Syllabus: {filename}" if filename else "Review Uploaded Document"
         return [{
             "title": fallback_title,
             "category": "Module Import",
             "priority": "Medium",
             "duration": "1 hr",
-            "notes": "PDF imported. Please add detailed sub-topics.",
+            "notes": "Document imported. Please add detailed sub-topics.",
             "status": "Pending"
         }]
 
@@ -141,19 +215,16 @@ def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, A
         clean_fn = re.sub(r"\.[^.]+$", "", filename).replace("_", " ").replace("-", " ")
         current_module = f"Module: {clean_fn.title()}"
 
-    # Regex patterns for modules/topics/bullets
     module_header_pattern = re.compile(r"^(?:Module|Chapter|Unit|Day|Section|Part)\s*\d+[:\-]?\s*(.*)$", re.IGNORECASE)
     bullet_pattern = re.compile(r"^(?:[\•\*\-\–\—\>]\s*|\d+[\.\)]\s*)(.+)$")
 
     for i, line in enumerate(lines):
-        # Check module header match
         mod_match = module_header_pattern.match(line)
         if mod_match:
             mod_title = mod_match.group(1).strip()
             current_module = f"Module: {mod_title}" if mod_title else line
             continue
 
-        # Check line length and bullet pattern
         bullet_match = bullet_pattern.match(line)
         is_topic_candidate = False
         topic_title = ""
@@ -162,13 +233,11 @@ def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, A
             topic_title = bullet_match.group(1).strip()
             is_topic_candidate = True
         elif 5 <= len(line) <= 120 and not line.endswith(":") and not re.match(r"^Page \d+", line, re.IGNORECASE):
-            # Check if line looks like a topic heading
             if line.istitle() or re.match(r"^[A-Z0-9]", line):
                 topic_title = line
                 is_topic_candidate = True
 
         if is_topic_candidate and len(topic_title) >= 3:
-            # Look ahead for additional context in subsequent line
             next_context = lines[i + 1] if i + 1 < len(lines) else ""
             priority = infer_priority(topic_title, next_context)
             duration = infer_duration(topic_title, next_context)
@@ -178,11 +247,10 @@ def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, A
                 "category": current_module,
                 "priority": priority,
                 "duration": duration,
-                "notes": f"Extracted from {filename or 'uploaded PDF'}. Topic: {topic_title}",
+                "notes": f"Extracted from {filename or 'document'}. Topic: {topic_title}",
                 "status": "Pending"
             })
 
-    # If no structured topics were extracted, fallback to paragraph chunking
     if not tasks:
         meaningful_lines = [l for l in lines if len(l) > 10 and not re.match(r"^Page \d+", l, re.IGNORECASE)]
         for chunk in meaningful_lines[:10]:
@@ -195,7 +263,6 @@ def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, A
                 "status": "Pending"
             })
 
-    # Deduplicate by title
     seen_titles = set()
     unique_tasks = []
     for t in tasks:

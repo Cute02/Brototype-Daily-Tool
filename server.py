@@ -10,7 +10,7 @@ from pathlib import Path
 from src.auth import AuthManager
 from src.storage import StorageManager
 from src.task_manager import TaskManager
-from src.pdf_parser import parse_pdf_to_tasks
+from src.pdf_parser import parse_pdf_to_tasks, fetch_bytes_from_url
 
 PORT = 8000
 DIRECTORY = Path(__file__).parent.resolve()
@@ -213,7 +213,13 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 filename = data.get("filename", "module.pdf") if isinstance(data, dict) else "module.pdf"
                 pdf_bytes = b""
-                if isinstance(data, dict) and "pdf_base64" in data:
+
+                if isinstance(data, dict) and "doc_url" in data and data["doc_url"].strip():
+                    doc_url = data["doc_url"].strip()
+                    pdf_bytes, url_fn = fetch_bytes_from_url(doc_url)
+                    if url_fn:
+                        filename = url_fn
+                elif isinstance(data, dict) and "pdf_base64" in data:
                     pdf_bytes = base64.b64decode(data["pdf_base64"])
                 else:
                     pdf_bytes = body
@@ -226,7 +232,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "tasks": candidate_tasks
                 })
             except Exception as e:
-                self._send_error_json(f"Failed to parse PDF module: {str(e)}", status=400)
+                self._send_error_json(f"Failed to parse document: {str(e)}", status=400)
             return
 
         if self.path == "/api/tasks/batch":

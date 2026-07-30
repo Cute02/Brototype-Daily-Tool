@@ -1085,9 +1085,34 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Dual Source Tab Switchers (File Explorer vs Google Drive)
+  const tabFileBtn = document.getElementById('tab-source-file');
+  const tabGdriveBtn = document.getElementById('tab-source-gdrive');
+  const fileContainer = document.getElementById('source-file-container');
+  const gdriveContainer = document.getElementById('source-gdrive-container');
+
+  if (tabFileBtn && tabGdriveBtn) {
+    tabFileBtn.addEventListener('click', () => {
+      tabFileBtn.classList.add('active');
+      tabGdriveBtn.classList.remove('active');
+      if (fileContainer) fileContainer.style.display = 'block';
+      if (gdriveContainer) gdriveContainer.style.display = 'none';
+    });
+
+    tabGdriveBtn.addEventListener('click', () => {
+      tabGdriveBtn.classList.add('active');
+      tabFileBtn.classList.remove('active');
+      if (gdriveContainer) gdriveContainer.style.display = 'block';
+      if (fileContainer) fileContainer.style.display = 'none';
+    });
+  }
+
+  const fetchUrlBtn = document.getElementById('fetch-url-doc-btn');
+  if (fetchUrlBtn) fetchUrlBtn.addEventListener('click', handleUrlDocFetch);
 });
 
-// PDF Syllabus Import Functions
+// PDF & Document Syllabus Import Functions
 let extractedPdfTasks = [];
 
 function openPdfModal(e) {
@@ -1098,14 +1123,26 @@ function openPdfModal(e) {
   extractedPdfTasks = [];
   const fileInput = document.getElementById('pdf-file-input');
   if (fileInput) fileInput.value = '';
+  const urlInput = document.getElementById('pdf-url-input');
+  if (urlInput) urlInput.value = '';
+
   const preview = document.getElementById('pdf-preview-container');
   if (preview) preview.style.display = 'none';
   const footer = document.getElementById('pdf-modal-footer');
   if (footer) footer.style.display = 'none';
   const spinner = document.getElementById('pdf-parsing-spinner');
   if (spinner) spinner.style.display = 'none';
-  const dropZone = document.getElementById('pdf-drop-zone');
-  if (dropZone) dropZone.style.display = 'block';
+
+  // Reset tab states
+  const tabFileBtn = document.getElementById('tab-source-file');
+  const tabGdriveBtn = document.getElementById('tab-source-gdrive');
+  const fileContainer = document.getElementById('source-file-container');
+  const gdriveContainer = document.getElementById('source-gdrive-container');
+
+  if (tabFileBtn) tabFileBtn.classList.add('active');
+  if (tabGdriveBtn) tabGdriveBtn.classList.remove('active');
+  if (fileContainer) fileContainer.style.display = 'block';
+  if (gdriveContainer) gdriveContainer.style.display = 'none';
 
   // Set default start date input to today
   const startDateInput = document.getElementById('pdf-start-date-input');
@@ -1132,12 +1169,17 @@ function closePdfModal(e) {
 }
 
 function handlePdfFileSelect(file) {
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    showToast('Please select a valid .pdf file', 'error');
+  const allowedExts = ['.pdf', '.docx', '.doc', '.txt', '.md'];
+  const fnLower = file.name.toLowerCase();
+  const isAllowed = allowedExts.some(ext => fnLower.endsWith(ext));
+
+  if (!isAllowed) {
+    showToast('Please select a valid .pdf, .docx, .txt, or .md document', 'error');
     return;
   }
 
-  document.getElementById('pdf-drop-zone').style.display = 'none';
+  const fileContainer = document.getElementById('source-file-container');
+  if (fileContainer) fileContainer.style.display = 'none';
   document.getElementById('pdf-parsing-spinner').style.display = 'block';
 
   const reader = new FileReader();
@@ -1169,17 +1211,60 @@ function handlePdfFileSelect(file) {
         renderPdfTasksPreview();
         showToast(`AI extracted ${data.tasks.length} topics from ${file.name}`, 'success');
       } else {
-        document.getElementById('pdf-drop-zone').style.display = 'block';
-        showToast(data.error || 'Failed to extract topics from PDF', 'error');
+        if (fileContainer) fileContainer.style.display = 'block';
+        showToast(data.error || 'Failed to extract topics from file', 'error');
       }
     })
     .catch(err => {
       document.getElementById('pdf-parsing-spinner').style.display = 'none';
-      document.getElementById('pdf-drop-zone').style.display = 'block';
-      showToast('Error uploading PDF: ' + err.message, 'error');
+      if (fileContainer) fileContainer.style.display = 'block';
+      showToast('Error uploading document: ' + err.message, 'error');
     });
   };
   reader.readAsArrayBuffer(file);
+}
+
+function handleUrlDocFetch() {
+  const urlInput = document.getElementById('pdf-url-input');
+  const docUrl = urlInput ? urlInput.value.trim() : '';
+
+  if (!docUrl) {
+    showToast('Please enter a valid Google Drive, Google Doc, or Document URL', 'error');
+    return;
+  }
+
+  const fileContainer = document.getElementById('source-file-container');
+  const gdriveContainer = document.getElementById('source-gdrive-container');
+  if (fileContainer) fileContainer.style.display = 'none';
+  if (gdriveContainer) gdriveContainer.style.display = 'none';
+
+  document.getElementById('pdf-parsing-spinner').style.display = 'block';
+
+  fetch('/api/pdf/import', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({ doc_url: docUrl })
+  })
+  .then(res => res.json())
+  .then(data => {
+    document.getElementById('pdf-parsing-spinner').style.display = 'none';
+    if (data.success && data.tasks && data.tasks.length > 0) {
+      extractedPdfTasks = data.tasks;
+      renderPdfTasksPreview();
+      showToast(`AI extracted ${data.tasks.length} topics from ${data.filename || 'URL'}`, 'success');
+    } else {
+      if (gdriveContainer) gdriveContainer.style.display = 'block';
+      showToast(data.error || 'Failed to extract document from URL', 'error');
+    }
+  })
+  .catch(err => {
+    document.getElementById('pdf-parsing-spinner').style.display = 'none';
+    if (gdriveContainer) gdriveContainer.style.display = 'block';
+    showToast('Error fetching URL: ' + err.message, 'error');
+  });
 }
 
 function renderPdfTasksPreview() {

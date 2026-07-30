@@ -426,12 +426,41 @@
         <button class="close-modal" id="close-pdf-modal">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc">Upload your Brototype module or topic syllabus PDF. AI topic extraction will parse modules, priorities, and estimated task durations automatically.</p>
-        
-        <div class="drop-zone" id="pdf-drop-zone">
-          <div class="drop-zone-icon">📥</div>
-          <div class="drop-zone-text">Drag & drop syllabus PDF here or <span>browse file</span></div>
-          <input type="file" id="pdf-file-input" accept=".pdf" style="display: none;">
+        <p class="modal-desc">Import your Brototype module or syllabus from File Explorer (.pdf, .docx, .txt) or paste a Google Drive link. AI will extract topics, priorities, and durations automatically.</p>
+
+        <!-- Source Selector Tabs -->
+        <div class="source-tabs" style="display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+          <button type="button" id="tab-source-file" class="btn btn-secondary btn-sm active" style="flex: 1;">
+            📁 File Explorer (.pdf, .docx, .txt)
+          </button>
+          <button type="button" id="tab-source-gdrive" class="btn btn-secondary btn-sm" style="flex: 1;">
+            ☁️ Google Drive & Web Links
+          </button>
+        </div>
+
+        <!-- Source Option 1: File Explorer Dropzone -->
+        <div id="source-file-container">
+          <div class="drop-zone" id="pdf-drop-zone">
+            <div class="drop-zone-icon">📥</div>
+            <div class="drop-zone-text">Drag & drop syllabus PDF, DOCX, or TXT here or <span>browse file</span></div>
+            <input type="file" id="pdf-file-input" accept=".pdf,.docx,.doc,.txt,.md" style="display: none;">
+          </div>
+        </div>
+
+        <!-- Source Option 2: Google Drive & Web Link Input -->
+        <div id="source-gdrive-container" style="display: none; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
+          <label style="font-size: 0.85rem; color: #a5b4fc; font-weight: 600; display: block; margin-bottom: 6px;">
+            Paste Google Drive, Google Doc, or Public Document URL
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input type="url" id="pdf-url-input" placeholder="https://docs.google.com/document/d/... or https://drive.google.com/..." style="flex: 1; padding: 8px; background: #0f172a; border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); font-size: 0.9rem;">
+            <button type="button" id="fetch-url-doc-btn" class="btn btn-primary btn-glow">
+              ⚡ Fetch & Extract
+            </button>
+          </div>
+          <p style="margin: 8px 0 0 0; font-size: 0.75rem; color: var(--text-muted);">
+            💡 Supports public Google Docs sharing links, Google Drive PDFs/Docs, and direct document URLs.
+          </p>
         </div>
 
         <div id="pdf-parsing-spinner" style="display: none; text-align: center; padding: 25px 0;">
