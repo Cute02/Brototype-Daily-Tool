@@ -1013,4 +1013,13 @@ body {
   padding: 10px 12px 2px 12px;
 }
 
+.pdf-preview-item.highlighted-topic {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.pdf-preview-item.highlighted-topic:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
 

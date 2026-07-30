@@ -1,10 +1,10 @@
-"""Document Parser (PDF, Docx, Text, Google Drive, Web Links) & AI Topic Extraction Engine."""
+"""Document Parser (PDF, Docx, Text, Google Drive, Web Links) & AI Bold/Highlight Extraction Engine."""
 import io
 import re
 import zipfile
 import urllib.request
 import urllib.parse
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 
 try:
     import pypdf
@@ -50,32 +50,65 @@ def fetch_bytes_from_url(url: str) -> Tuple[bytes, str]:
     return content_bytes, filename
 
 
-def extract_raw_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extract raw text content from PDF binary stream."""
+def extract_pdf_spans_and_highlights(pdf_bytes: bytes) -> Tuple[str, Set[str]]:
+    """Extract text content and set of bold/highlighted text spans from PDF stream."""
     if not pdf_bytes:
-        return ""
+        return "", set()
 
-    text = ""
+    full_text_pages = []
+    highlighted_spans: Set[str] = set()
 
-    # Try pypdf first if available
     if PYPDF_AVAILABLE:
         try:
             reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-            extracted_pages = []
             for page in reader.pages:
-                page_text = page.extract_text() or ""
-                if page_text.strip():
-                    extracted_pages.append(page_text)
-            if extracted_pages:
-                text = "\n".join(extracted_pages)
-        except Exception:
-            text = ""
+                # 1. Extract text and detect bold font names via text visitor
+                page_text_runs = []
 
-    # Fallback to direct stream regex text extraction if pypdf didn't produce text
-    if not text.strip():
+                def visitor_body(text, cm, tm, font_dict, font_size):
+                    if not text or not text.strip():
+                        return
+                    clean_t = text.strip()
+                    page_text_runs.append(clean_t)
+                    
+                    # Detect Bold fonts in PDF font dictionary
+                    font_name = ""
+                    if font_dict:
+                        font_name = str(font_dict.get("/BaseFont", "") or font_dict.get("/Name", "")).lower()
+                    if any(b in font_name for b in ["bold", "black", "heavy", "bd", "b+"]):
+                        if len(clean_t) >= 3:
+                            highlighted_spans.add(clean_t.lower())
+
+                page.extract_text(visitor_text=visitor_body)
+                if page_text_runs:
+                    full_text_pages.append("\n".join(page_text_runs))
+
+                # 2. Extract PDF Highlight Annotations
+                try:
+                    annots = page.get("/Annots")
+                    if annots:
+                        for annot in annots:
+                            obj = annot.get_object() if hasattr(annot, "get_object") else annot
+                            if obj and obj.get("/Subtype") == "/Highlight":
+                                contents = str(obj.get("/Contents", "")).strip()
+                                if contents and len(contents) >= 3:
+                                    highlighted_spans.add(contents.lower())
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    text = "\n".join(full_text_pages).strip()
+
+    # Fallback stream regex text extraction if PyPDF produced empty text
+    if not text:
         try:
             raw_str = pdf_bytes.decode("latin-1", errors="ignore")
-            # Extract text blocks inside PDF parentheses (Tj / TJ operators)
+            # Look for bold font object markers in raw PDF stream
+            bold_font_matches = re.findall(r"/Font\s*<.*?/BaseFont\s*/[^\s]*[Bb][Oo][Ll][Dd][^\s]*", raw_str)
+            if bold_font_matches:
+                highlighted_spans.add("bold_detected_in_stream")
+
             text_blocks = re.findall(r"\(([^()]{2,})\)\s*TJ|\(([^()]{2,})\)\s*Tj", raw_str)
             flat_blocks = []
             for item in text_blocks:
@@ -90,11 +123,12 @@ def extract_raw_text_from_pdf(pdf_bytes: bytes) -> str:
         except Exception:
             text = ""
 
-    return text.strip()
+    return text.strip(), highlighted_spans
 
 
-def extract_raw_text_from_docx(docx_bytes: bytes) -> str:
-    """Extract raw text content from DOCX file binary stream."""
+def extract_docx_spans_and_highlights(docx_bytes: bytes) -> Tuple[str, Set[str]]:
+    """Extract text content and set of bold/highlighted text spans from DOCX stream."""
+    highlighted_spans: Set[str] = set()
     try:
         with zipfile.ZipFile(io.BytesIO(docx_bytes)) as zf:
             xml_content = zf.read("word/document.xml").decode("utf-8", errors="ignore")
@@ -105,34 +139,58 @@ def extract_raw_text_from_docx(docx_bytes: bytes) -> str:
                 full_p = "".join(texts).strip()
                 if full_p:
                     text_lines.append(full_p)
-            return "\n".join(text_lines)
+
+                # Check if paragraph has bold (<w:b/>) or highlight (<w:highlight/>) tags
+                if re.search(r"<w:b\b|<w:highlight\b", p):
+                    if full_p and len(full_p) >= 3:
+                        highlighted_spans.add(full_p.lower())
+            return "\n".join(text_lines), highlighted_spans
     except Exception:
-        return ""
+        return "", set()
 
 
-def extract_text_from_bytes(file_bytes: bytes, filename: str = "") -> str:
-    """Extract text from PDF, DOCX, TXT, or MD files."""
+def extract_text_and_highlights_from_bytes(file_bytes: bytes, filename: str = "") -> Tuple[str, Set[str]]:
+    """Extract text and detected bold/highlighted terms from PDF, DOCX, TXT, or MD files."""
     fn_lower = filename.lower()
+    highlighted_spans: Set[str] = set()
+
     if fn_lower.endswith(".docx") or fn_lower.endswith(".doc"):
-        text = extract_raw_text_from_docx(file_bytes)
+        text, docx_highlights = extract_docx_spans_and_highlights(file_bytes)
         if text.strip():
-            return text
+            return text, docx_highlights
 
     if fn_lower.endswith(".pdf") or file_bytes.startswith(b"%PDF"):
-        return extract_raw_text_from_pdf(file_bytes)
+        return extract_pdf_spans_and_highlights(file_bytes)
 
-    # Fallback to UTF-8 / latin-1 plain text / markdown text parsing
+    # Markdown / Text bold formatting (**bold** or __bold__)
     try:
-        return file_bytes.decode("utf-8").strip()
+        text = file_bytes.decode("utf-8").strip()
     except UnicodeDecodeError:
         try:
-            return file_bytes.decode("latin-1", errors="ignore").strip()
+            text = file_bytes.decode("latin-1", errors="ignore").strip()
         except Exception:
-            return extract_raw_text_from_pdf(file_bytes)
+            text = ""
+
+    md_bolds = re.findall(r"\*\*([^*]{3,})\*\*|__([^_{3,})__|#+\s*(.+)", text)
+    for match in md_bolds:
+        b_term = (match[0] or match[1] or match[2]).strip()
+        if b_term:
+            highlighted_spans.add(b_term.lower())
+
+    return text, highlighted_spans
 
 
-def infer_priority(topic_title: str, text_context: str) -> str:
+def extract_raw_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract raw text content from PDF binary stream."""
+    text, _ = extract_pdf_spans_and_highlights(pdf_bytes)
+    return text
+
+
+def infer_priority(topic_title: str, text_context: str, is_highlighted: bool = False) -> str:
     """AI heuristic rule to classify topic priority (High, Medium, Low)."""
+    if is_highlighted:
+        return "High"
+
     combined = f"{topic_title} {text_context}".lower()
 
     high_keywords = [
@@ -194,8 +252,8 @@ def infer_duration(topic_title: str, text_context: str) -> str:
 
 
 def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, Any]]:
-    """Parse Document/PDF binary content and return structured candidate tasks list."""
-    raw_text = extract_text_from_bytes(pdf_bytes, filename=filename)
+    """Parse Document/PDF binary content, detect AI bold/highlighted topics, and return structured candidate tasks list."""
+    raw_text, highlighted_spans = extract_text_and_highlights_from_bytes(pdf_bytes, filename=filename)
     if not raw_text:
         fallback_title = f"Review Syllabus: {filename}" if filename else "Review Uploaded Document"
         return [{
@@ -204,7 +262,8 @@ def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, A
             "priority": "Medium",
             "duration": "1 hr",
             "notes": "Document imported. Please add detailed sub-topics.",
-            "status": "Pending"
+            "status": "Pending",
+            "is_highlighted": False
         }]
 
     lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
@@ -239,28 +298,39 @@ def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, A
 
         if is_topic_candidate and len(topic_title) >= 3:
             next_context = lines[i + 1] if i + 1 < len(lines) else ""
-            priority = infer_priority(topic_title, next_context)
+
+            # Check if topic title matches any bold or highlighted spans detected in document
+            tt_lower = topic_title.lower()
+            is_bold_highlight = any(h_span in tt_lower or tt_lower in h_span for h_span in highlighted_spans)
+
+            priority = infer_priority(topic_title, next_context, is_highlighted=is_bold_highlight)
             duration = infer_duration(topic_title, next_context)
+
+            note_suffix = " [✨ AI Bold/Highlighted Topic]" if is_bold_highlight else ""
 
             tasks.append({
                 "title": topic_title,
                 "category": current_module,
                 "priority": priority,
                 "duration": duration,
-                "notes": f"Extracted from {filename or 'document'}. Topic: {topic_title}",
-                "status": "Pending"
+                "notes": f"Extracted from {filename or 'document'}. Topic: {topic_title}{note_suffix}",
+                "status": "Pending",
+                "is_highlighted": is_bold_highlight
             })
 
     if not tasks:
         meaningful_lines = [l for l in lines if len(l) > 10 and not re.match(r"^Page \d+", l, re.IGNORECASE)]
         for chunk in meaningful_lines[:10]:
+            chunk_lower = chunk.lower()
+            is_bold_highlight = any(h_span in chunk_lower for h_span in highlighted_spans)
             tasks.append({
                 "title": chunk[:80] + ("..." if len(chunk) > 80 else ""),
                 "category": current_module,
-                "priority": infer_priority(chunk, ""),
+                "priority": infer_priority(chunk, "", is_highlighted=is_bold_highlight),
                 "duration": infer_duration(chunk, ""),
                 "notes": chunk,
-                "status": "Pending"
+                "status": "Pending",
+                "is_highlighted": is_bold_highlight
             })
 
     seen_titles = set()

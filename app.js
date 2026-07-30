@@ -1312,12 +1312,16 @@ function renderPdfTasksPreview() {
 
     groupTasks.forEach((task) => {
       const idx = task.origIndex;
+      const isHl = Boolean(task.is_highlighted);
       const item = document.createElement('div');
-      item.className = 'pdf-preview-item';
+      item.className = `pdf-preview-item ${isHl ? 'highlighted-topic' : ''}`;
       item.innerHTML = `
         <input type="checkbox" class="pdf-task-checkbox" data-idx="${idx}" checked>
         <div class="pdf-preview-info">
-          <input type="text" class="pdf-preview-title-input" id="pdf-title-${idx}" value="${escapeHtml(task.title)}">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <input type="text" class="pdf-preview-title-input" id="pdf-title-${idx}" value="${escapeHtml(task.title)}" style="${isHl ? 'font-weight: 700; color: #fef08a;' : ''}">
+            ${isHl ? '<span class="badge badge-warning" style="font-size: 0.68rem; padding: 2px 6px; white-space: nowrap;">✨ AI Highlighted</span>' : ''}
+          </div>
           <div class="pdf-preview-meta">
             <span class="badge badge-secondary" style="font-size: 0.7rem;">${escapeHtml(task.category)}</span>
             <label style="color: var(--text-muted); font-size: 0.75rem;">Priority:</label>
