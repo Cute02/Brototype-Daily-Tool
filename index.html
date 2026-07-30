@@ -152,8 +152,11 @@
 
         <!-- Add New Task Form -->
         <div class="card add-task-card">
-          <div class="card-header">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h2>➕ Add Daily Task</h2>
+            <button type="button" id="import-pdf-card-btn" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; padding: 4px 10px;">
+              📄 Import PDF
+            </button>
           </div>
           <form id="add-task-form">
             <div class="form-group">
@@ -193,6 +196,13 @@
             </div>
 
             <button type="submit" class="btn btn-primary btn-block">➕ Add Task</button>
+
+            <div class="pdf-quick-import-box" style="margin-top: 15px; padding: 12px; background: rgba(99, 102, 241, 0.1); border: 1px dashed rgba(99, 102, 241, 0.4); border-radius: 8px; text-align: center;">
+              <p style="margin: 0 0 8px 0; font-size: 0.85rem; color: #cbd5e1;">Have a Module Syllabus PDF?</p>
+              <button type="button" id="import-pdf-inline-btn" class="btn btn-secondary btn-block btn-glow">
+                📄 Import Syllabus PDF & Generate Tasks
+              </button>
+            </div>
           </form>
         </div>
       </aside>

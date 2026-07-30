@@ -1009,6 +1009,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const importPdfBtn = document.getElementById('import-pdf-btn');
   if (importPdfBtn) importPdfBtn.addEventListener('click', openPdfModal);
 
+  const importPdfCardBtn = document.getElementById('import-pdf-card-btn');
+  if (importPdfCardBtn) importPdfCardBtn.addEventListener('click', openPdfModal);
+
+  const importPdfInlineBtn = document.getElementById('import-pdf-inline-btn');
+  if (importPdfInlineBtn) importPdfInlineBtn.addEventListener('click', openPdfModal);
+
   const closePdfBtn = document.getElementById('close-pdf-modal');
   if (closePdfBtn) closePdfBtn.addEventListener('click', closePdfModal);
 
