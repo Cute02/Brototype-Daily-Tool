@@ -32,6 +32,7 @@ class TaskManager:
         status: str = TaskStatus.PENDING.value,
         duration: str = "1 hr",
         scheduled_time: str = "",
+        subtopics: Optional[List[Dict[str, Any]]] = None,
     ) -> Task:
         """Create and append a new task."""
         if not title.strip():
@@ -50,6 +51,7 @@ class TaskManager:
             created_at=now,
             updated_at=now,
             notes=notes.strip(),
+            subtopics=subtopics or [],
         )
         self.tasks.append(new_task)
         self.save()
@@ -70,6 +72,7 @@ class TaskManager:
             notes = str(item.get("notes", "")).strip()
             status = TaskStatus.normalize(str(item.get("status", TaskStatus.PENDING.value)))
             scheduled_time = str(item.get("scheduled_time", "")).strip()
+            subtopics = item.get("subtopics", [])
 
             new_task = Task(
                 id=task_id,
@@ -82,6 +85,7 @@ class TaskManager:
                 created_at=now,
                 updated_at=now,
                 notes=notes,
+                subtopics=subtopics,
             )
             self.tasks.append(new_task)
             created_tasks.append(new_task)
@@ -104,7 +108,17 @@ class TaskManager:
         if not task:
             return False
 
-        task.status = TaskStatus.normalize(status)
+        norm_status = TaskStatus.normalize(status)
+        task.status = norm_status
+
+        # If manually setting main task to Completed, complete all subtopics
+        if norm_status == TaskStatus.COMPLETED.value and task.subtopics:
+            for s in task.subtopics:
+                s["completed"] = True
+        elif norm_status == TaskStatus.PENDING.value and task.subtopics:
+            for s in task.subtopics:
+                s["completed"] = False
+
         task.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if notes is not None and notes.strip():
             if task.notes:
@@ -134,6 +148,7 @@ class TaskManager:
         duration: Optional[str] = None,
         scheduled_time: Optional[str] = None,
         notes: Optional[str] = None,
+        subtopics: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
         """Update multiple fields of a task."""
         task = self.get_task_by_id(task_id)
@@ -146,14 +161,20 @@ class TaskManager:
             task.category = category.strip() or "General"
         if priority is not None:
             task.priority = TaskPriority.normalize(priority)
-        if status is not None:
-            task.status = TaskStatus.normalize(status)
         if duration is not None:
             task.duration = duration.strip() or "1 hr"
         if scheduled_time is not None:
             task.scheduled_time = scheduled_time.strip()
         if notes is not None:
             task.notes = notes.strip()
+        if subtopics is not None:
+            task.subtopics = subtopics
+
+        if status is not None:
+            task.status = TaskStatus.normalize(status)
+
+        # Sync overall status if subtopics exist
+        task.sync_subtopics_status()
 
         task.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return self.save()
@@ -165,6 +186,37 @@ class TaskManager:
         if len(self.tasks) < initial_count:
             return self.save()
         return False
+
+    def delete_tasks_bulk(self, task_ids: List[int]) -> int:
+        """Delete multiple tasks by IDs and return count of deleted tasks."""
+        id_set = set(task_ids)
+        initial_count = len(self.tasks)
+        self.tasks = [t for t in self.tasks if t.id not in id_set]
+        deleted_count = initial_count - len(self.tasks)
+        if deleted_count > 0:
+            self.save()
+        return deleted_count
+
+    def add_subtopic(self, task_id: int, title: str) -> bool:
+        """Add a subtopic to a specific task."""
+        task = self.get_task_by_id(task_id)
+        if not task or not title.strip():
+            return False
+        new_id = f"sub_{len(task.subtopics) + 1}"
+        task.subtopics.append({"id": new_id, "title": title.strip(), "completed": False})
+        task.sync_subtopics_status()
+        task.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return self.save()
+
+    def delete_subtopic(self, task_id: int, sub_index: int) -> bool:
+        """Delete a subtopic by index from a specific task."""
+        task = self.get_task_by_id(task_id)
+        if not task or sub_index < 0 or sub_index >= len(task.subtopics):
+            return False
+        task.subtopics.pop(sub_index)
+        task.sync_subtopics_status()
+        task.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return self.save()
 
     def filter_tasks(
         self,

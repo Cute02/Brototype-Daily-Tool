@@ -20,7 +20,22 @@ auth_manager = AuthManager()
 
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(DIRECTORY), **kwargs)
+        dist_dir = DIRECTORY / "frontend" / "dist"
+        target_dir = dist_dir if dist_dir.exists() else DIRECTORY
+        super().__init__(*args, directory=str(target_dir), **kwargs)
+
+    def translate_path(self, path):
+        # Override to check frontend/dist first if it exists
+        dist_dir = DIRECTORY / "frontend" / "dist"
+        if dist_dir.exists():
+            clean_path = urllib.parse.urlparse(path).path
+            req_file = dist_dir / clean_path.lstrip("/")
+            if req_file.exists() and req_file.is_file():
+                return str(req_file)
+            elif not clean_path.startswith("/api/"):
+                return str(dist_dir / "index.html")
+        return super().translate_path(path)
+
 
     def _send_json(self, data, status=200):
         self.send_response(status)
@@ -253,6 +268,20 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_error_json(str(e), status=400)
             return
 
+        if self.path == "/api/tasks/bulk-delete":
+            try:
+                task_ids = data.get("ids", []) if isinstance(data, dict) else []
+                if not isinstance(task_ids, list) or not task_ids:
+                    raise ValueError("No task IDs provided for bulk delete.")
+
+                mgr = self._get_task_manager()
+                mgr.refresh()
+                count = mgr.delete_tasks_bulk(task_ids)
+                self._send_json({"success": True, "deleted_count": count})
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
+            return
+
         self._send_error_json("Endpoint not found", status=404)
 
     def do_PUT(self):
@@ -273,7 +302,8 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     status=data.get("status"),
                     duration=data.get("duration"),
                     scheduled_time=data.get("scheduled_time"),
-                    notes=data.get("notes")
+                    notes=data.get("notes"),
+                    subtopics=data.get("subtopics")
                 )
                 if success:
                     updated_task = mgr.get_task_by_id(task_id)

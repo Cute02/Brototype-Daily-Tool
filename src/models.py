@@ -1,5 +1,5 @@
 """Data models for Brototype Daily Task Updating Tool."""
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from enum import Enum
 from typing import Dict, Any, List
@@ -54,6 +54,7 @@ class Task:
     created_at: str = ""
     updated_at: str = ""
     notes: str = ""
+    subtopics: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -64,9 +65,46 @@ class Task:
         if not self.duration:
             self.duration = "1 hr"
 
+        if self.subtopics is None:
+            self.subtopics = []
+
+        # Ensure valid subtopic format
+        normalized_subtopics = []
+        for idx, sub in enumerate(self.subtopics):
+            if isinstance(sub, str):
+                normalized_subtopics.append({
+                    "id": f"sub_{idx + 1}",
+                    "title": sub,
+                    "completed": False
+                })
+            elif isinstance(sub, dict):
+                normalized_subtopics.append({
+                    "id": str(sub.get("id", f"sub_{idx + 1}")),
+                    "title": str(sub.get("title", "")),
+                    "completed": bool(sub.get("completed", False))
+                })
+        self.subtopics = normalized_subtopics
+
+        # Sync overall status if subtopics exist
+        self.sync_subtopics_status()
+
         # Normalize status & priority
         self.status = TaskStatus.normalize(self.status)
         self.priority = TaskPriority.normalize(self.priority)
+
+    def sync_subtopics_status(self):
+        """Automatically update main task status based on subtopics completion."""
+        if not self.subtopics:
+            return
+
+        total = len(self.subtopics)
+        completed_count = sum(1 for s in self.subtopics if s.get("completed", False))
+
+        if completed_count == total:
+            self.status = TaskStatus.COMPLETED.value
+        elif completed_count > 0:
+            if self.status != TaskStatus.BLOCKED.value:
+                self.status = TaskStatus.IN_PROGRESS.value
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -84,4 +122,6 @@ class Task:
             created_at=str(data.get("created_at", "")),
             updated_at=str(data.get("updated_at", "")),
             notes=str(data.get("notes", "")),
+            subtopics=data.get("subtopics", []),
         )
+

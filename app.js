@@ -502,8 +502,38 @@ function renderStats() {
   document.getElementById('stat-blocked').innerText = s.blocked || 0;
   
   const rate = s.completion_rate || 0;
-  document.getElementById('progress-percentage').innerText = `${rate}%`;
-  document.getElementById('progress-bar-fill').style.width = `${rate}%`;
+  const completed = s.completed || 0;
+  const total = s.total || 0;
+
+  const progressPct = document.getElementById('progress-percentage');
+  const progressFill = document.getElementById('progress-bar-fill');
+  if (progressPct) progressPct.innerText = `${rate}%`;
+  if (progressFill) progressFill.style.width = `${rate}%`;
+
+  // Update Circular Progress Ring Widget
+  const circleText = document.getElementById('circle-percent-text');
+  const circleFill = document.getElementById('circle-fill-bar');
+  const circleLabel = document.getElementById('circle-status-label');
+  const circleCount = document.getElementById('circle-count-text');
+
+  if (circleText) circleText.innerText = `${rate}%`;
+  if (circleCount) circleCount.innerText = `${completed} of ${total} Tasks Completed`;
+  
+  if (circleLabel) {
+    if (rate >= 100 && total > 0) circleLabel.innerText = '🎉 All Done!';
+    else if (rate >= 75) circleLabel.innerText = '🔥 Almost There!';
+    else if (rate >= 50) circleLabel.innerText = '⚡ Great Progress!';
+    else if (rate > 0) circleLabel.innerText = '🚀 Getting Started';
+    else circleLabel.innerText = 'Keep Going!';
+  }
+
+  if (circleFill) {
+    const radius = 52;
+    const circumference = 2 * Math.PI * radius; // 326.72
+    const offset = circumference - (rate / 100) * circumference;
+    circleFill.style.strokeDasharray = `${circumference}`;
+    circleFill.style.strokeDashoffset = `${offset}`;
+  }
 }
 
 function renderTodoList() {
@@ -521,6 +551,28 @@ function renderTodoList() {
   state.tasks.forEach(task => {
     const isCompleted = task.status === 'Completed';
     const prioClass = task.priority.toLowerCase();
+    const subtopics = task.subtopics || [];
+    const completedSubtopics = subtopics.filter(s => s.completed).length;
+
+    let subtopicsHtml = `
+      <div class="subtopics-container">
+        <div class="subtopics-header">
+          <span>Subtopics Checklist</span>
+          <span>${completedSubtopics}/${subtopics.length} Done</span>
+        </div>
+        ${subtopics.map((sub, sIdx) => `
+          <div class="subtopic-item ${sub.completed ? 'completed' : ''}">
+            <input type="checkbox" class="subtopic-checkbox" data-task-id="${task.id}" data-sub-idx="${sIdx}" ${sub.completed ? 'checked' : ''}>
+            <span class="subtopic-title" style="flex:1;">${escapeHtml(sub.title)}</span>
+            <button class="btn-del-sub" data-task-id="${task.id}" data-sub-idx="${sIdx}" style="background:transparent;border:none;color:#f43f5e;cursor:pointer;opacity:0.7;">✖</button>
+          </div>
+        `).join('')}
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <input type="text" id="add-sub-input-${task.id}" placeholder="➕ Add subtopic..." style="flex:1;padding:4px 8px;font-size:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:white;">
+          <button class="btn btn-sm btn-primary btn-add-sub" data-task-id="${task.id}" style="padding:3px 10px;font-size:11px;">Add</button>
+        </div>
+      </div>
+    `;
 
     const item = document.createElement('div');
     item.className = `task-item ${isCompleted ? 'completed' : ''}`;
@@ -534,8 +586,10 @@ function renderTodoList() {
           <span class="badge badge-${prioClass}">🔴 ${task.priority} Priority</span>
           <span class="badge badge-duration">⏱ ${escapeHtml(task.duration || '1 hr')}</span>
           <span class="badge badge-category">${escapeHtml(task.category)}</span>
+          ${subtopics.length > 0 ? `<span class="badge subtopic-badge">📑 ${completedSubtopics}/${subtopics.length} Subtopics</span>` : ''}
         </div>
         ${task.notes ? `<div class="task-notes-text">📝 ${escapeHtml(task.notes)}</div>` : ''}
+        ${subtopicsHtml}
       </div>
       <div class="task-actions">
         <select class="status-select" data-id="${task.id}">
@@ -548,6 +602,69 @@ function renderTodoList() {
         <button class="btn-delete" data-id="${task.id}" title="Delete Task">🗑️</button>
       </div>
     `;
+
+    // Handle Subtopic Checkbox Toggles
+    item.querySelectorAll('.subtopic-checkbox').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const subIdx = parseInt(e.target.getAttribute('data-sub-idx'));
+        const isChecked = e.target.checked;
+
+        const updatedSubtopics = task.subtopics.map((s, i) => {
+          if (i === subIdx) {
+            return { ...s, completed: isChecked };
+          }
+          return { ...s };
+        });
+
+        const total = updatedSubtopics.length;
+        const numDone = updatedSubtopics.filter(s => s.completed).length;
+        let newStatus = task.status;
+
+        if (numDone === total) {
+          newStatus = 'Completed';
+          triggerConfettiBurst(e.clientX, e.clientY);
+        } else if (numDone > 0) {
+          newStatus = 'In Progress';
+        } else {
+          newStatus = 'Pending';
+        }
+
+        updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
+      });
+    });
+
+    item.querySelectorAll('.btn-del-sub').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const subIdx = parseInt(e.currentTarget.getAttribute('data-sub-idx'));
+        const updatedSubtopics = task.subtopics.filter((_, i) => i !== subIdx);
+        const total = updatedSubtopics.length;
+        const numDone = updatedSubtopics.filter(s => s.completed).length;
+        let newStatus = task.status;
+        if (numDone === total && total > 0) newStatus = 'Completed';
+        else if (numDone > 0) newStatus = 'In Progress';
+        else newStatus = 'Pending';
+
+        updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
+      });
+    });
+
+    item.querySelectorAll('.btn-add-sub').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = item.querySelector(`#add-sub-input-${task.id}`);
+        if (!input || !input.value.trim()) return;
+        const newTitle = input.value.trim();
+        const updatedSubtopics = [...(task.subtopics || []), { id: `sub_${(task.subtopics || []).length + 1}`, title: newTitle, completed: false }];
+        
+        const total = updatedSubtopics.length;
+        const numDone = updatedSubtopics.filter(s => s.completed).length;
+        let newStatus = task.status;
+        if (numDone === total && total > 0) newStatus = 'Completed';
+        else if (numDone > 0) newStatus = 'In Progress';
+        else newStatus = 'Pending';
+
+        updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
+      });
+    });
 
     item.querySelector('.task-checkbox').addEventListener('click', (e) => {
       const current = e.currentTarget.getAttribute('data-current');
@@ -1313,6 +1430,7 @@ function renderPdfTasksPreview() {
     groupTasks.forEach((task) => {
       const idx = task.origIndex;
       const isHl = Boolean(task.is_highlighted);
+      const subtopics = task.subtopics || [];
       const item = document.createElement('div');
       item.className = `pdf-preview-item ${isHl ? 'highlighted-topic' : ''}`;
       item.innerHTML = `
@@ -1324,6 +1442,7 @@ function renderPdfTasksPreview() {
           </div>
           <div class="pdf-preview-meta">
             <span class="badge badge-secondary" style="font-size: 0.7rem;">${escapeHtml(task.category)}</span>
+            ${subtopics.length > 0 ? `<span class="badge subtopic-badge" style="font-size: 0.7rem;">📑 ${subtopics.length} Subtopics</span>` : ''}
             <label style="color: var(--text-muted); font-size: 0.75rem;">Priority:</label>
             <select class="pdf-preview-select" id="pdf-prio-${idx}">
               <option value="High" ${task.priority === 'High' ? 'selected' : ''}>🔴 High</option>
@@ -1338,6 +1457,14 @@ function renderPdfTasksPreview() {
               <option value="3 hrs" ${task.duration === '3 hrs' ? 'selected' : ''}>🎯 3 hrs</option>
             </select>
           </div>
+          ${subtopics.length > 0 ? `
+            <div style="font-size: 0.78rem; color: #a5b4fc; margin-top: 6px; padding-left: 8px; border-left: 2px solid rgba(99, 102, 241, 0.4);">
+              <strong>Extracted Subtopics:</strong>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
+                ${subtopics.map(s => `<span style="background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 4px; color: #cbd5e1;">• ${escapeHtml(s.title)}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>
       `;
       groupBody.appendChild(item);
@@ -1454,3 +1581,19 @@ function confirmBatchImportTasks() {
     showToast('Failed to import tasks: ' + err.message, 'error');
   });
 }
+
+// Theme Switcher Initialization
+document.addEventListener('DOMContentLoaded', () => {
+  const savedTheme = localStorage.getItem('theme_preference') || 'ember';
+  document.body.setAttribute('data-theme', savedTheme);
+
+  const themeDropdown = document.getElementById('theme-selector-dropdown');
+  if (themeDropdown) {
+    themeDropdown.value = savedTheme;
+    themeDropdown.addEventListener('change', (e) => {
+      const selected = e.target.value;
+      document.body.setAttribute('data-theme', selected);
+      localStorage.setItem('theme_preference', selected);
+    });
+  }
+});

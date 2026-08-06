@@ -6,8 +6,8 @@
   <title>Brototype Daily Task Tool - To-Do & Focus Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div class="app-container">
@@ -21,6 +21,12 @@
         </div>
       </div>
       <div class="header-actions">
+        <select id="theme-selector-dropdown" class="select-sm theme-select" style="margin-right: 6px;">
+          <option value="ember">🎃 Ember Copper Cyber</option>
+          <option value="purple">🔮 Solo Leveling Neon</option>
+          <option value="cyan">⚡ Matrix Sci-Fi Cyan</option>
+          <option value="blue">🌌 Midnight Ocean Blue</option>
+        </select>
         <div class="user-badge" id="user-profile-badge" style="display: none;">
           👤 <span id="user-display-name">Guest</span>
         </div>
@@ -81,20 +87,46 @@
       </div>
     </section>
 
-    <!-- Completion Rate Progress Bar -->
-    <div class="progress-container">
-      <div class="progress-header">
-        <span>Daily Completion Rate</span>
-        <span id="progress-percentage">0%</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-bar" id="progress-bar-fill" style="width: 0%;"></div>
-      </div>
-    </div>
-
     <main class="main-layout">
       <!-- Left Column: Pomodoro & Add Task -->
       <aside class="sidebar-layout">
+        <!-- 🎯 Circular Goal Completion Ring Widget -->
+        <div class="card circular-progress-card">
+          <div class="card-header" style="margin-bottom: 12px;">
+            <h2>🎯 Productivity Goal</h2>
+          </div>
+
+          <div class="circle-wrapper">
+            <svg className="circle-svg" width="140" height="140" viewBox="0 0 140 140">
+              <circle
+                class="circle-bg"
+                cx="70"
+                cy="70"
+                r="52"
+                stroke-width="10"
+              />
+              <circle
+                id="circle-fill-bar"
+                class="circle-fill"
+                cx="70"
+                cy="70"
+                r="52"
+                stroke-width="10"
+                style="stroke-dasharray: 326.72; stroke-dashoffset: 326.72;"
+              />
+            </svg>
+            <div class="circle-content">
+              <span class="circle-percent" id="circle-percent-text">0%</span>
+              <span class="circle-sublabel">Done</span>
+            </div>
+          </div>
+
+          <div class="circle-footer-info">
+            <span class="badge-progress-text" id="circle-status-label">Keep Going!</span>
+            <span class="circle-stats-count" id="circle-count-text">0 of 0 Tasks Completed</span>
+          </div>
+        </div>
+
         <!-- 🍅 Pomodoro Focus Timer -->
         <div class="card pomodoro-card">
           <div class="card-header">

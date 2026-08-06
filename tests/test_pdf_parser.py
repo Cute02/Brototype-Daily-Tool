@@ -59,3 +59,32 @@ def test_batch_task_addition(tmp_path):
     # Verify atomic load
     reloaded_manager = TaskManager(storage_manager=storage)
     assert len(reloaded_manager.tasks) == 2
+
+
+def test_subtopic_extraction_bullet_and_colon():
+    raw_text = """
+    1. Core Python Basics
+       - Variables and Data Types
+       - Control Flow Statements
+       - Functions and Modules
+    2. Data Structures: Lists, Dictionaries, Sets, Tuples
+    """
+    tasks = parse_pdf_to_tasks(raw_text.encode("utf-8"), filename="test_curriculum.pdf")
+    assert len(tasks) == 2
+
+    # Check topic 1 subtopics
+    t1 = tasks[0]
+    assert t1["title"] == "Core Python Basics"
+    assert len(t1["subtopics"]) == 3
+    sub_titles = [s["title"] for s in t1["subtopics"]]
+    assert "Variables and Data Types" in sub_titles
+    assert "Control Flow Statements" in sub_titles
+
+    # Check topic 2 subtopics from colon list
+    t2 = tasks[1]
+    assert t2["title"] == "Data Structures"
+    assert len(t2["subtopics"]) == 4
+    sub2_titles = [s["title"] for s in t2["subtopics"]]
+    assert "Lists" in sub2_titles
+    assert "Dictionaries" in sub2_titles
+

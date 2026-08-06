@@ -91,3 +91,38 @@ def test_task_manager_crud_and_sorting(temp_json_file):
     # Delete task
     assert manager.delete_task(t3.id) is True
     assert len(manager.tasks) == 2
+
+
+def test_subtopics_auto_checklist_completion(temp_json_file):
+    storage = StorageManager(file_path=temp_json_file)
+    manager = TaskManager(storage_manager=storage)
+
+    subtopics = [
+        {"id": "sub_1", "title": "Setup virtualenv", "completed": False},
+        {"id": "sub_2", "title": "Install dependencies", "completed": False},
+    ]
+
+    t = manager.add_task(
+        title="1. Python Environment Setup",
+        category="Dev",
+        priority="High",
+        subtopics=subtopics
+    )
+    assert t.status == TaskStatus.PENDING.value
+
+    # Complete 1 subtopic -> In Progress
+    updated_subs = [
+        {"id": "sub_1", "title": "Setup virtualenv", "completed": True},
+        {"id": "sub_2", "title": "Install dependencies", "completed": False},
+    ]
+    manager.update_task_details(t.id, subtopics=updated_subs)
+    assert manager.get_task_by_id(t.id).status == TaskStatus.IN_PROGRESS.value
+
+    # Complete all subtopics -> Completed automatically!
+    updated_subs_all = [
+        {"id": "sub_1", "title": "Setup virtualenv", "completed": True},
+        {"id": "sub_2", "title": "Install dependencies", "completed": True},
+    ]
+    manager.update_task_details(t.id, subtopics=updated_subs_all)
+    assert manager.get_task_by_id(t.id).status == TaskStatus.COMPLETED.value
+
