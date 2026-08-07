@@ -1772,6 +1772,20 @@ function confirmBatchImportTasks() {
     });
   }
 
+  if (IS_GITHUB_PAGES) {
+    const all = getStoredTasksFromLocalStorage();
+    let maxId = all.length > 0 ? Math.max(...all.map(t => t.id)) : 0;
+    const newTasks = selectedTasks.map(t => {
+      maxId++;
+      return { ...t, id: maxId, status: 'Pending', subtopics: t.subtopics || [] };
+    });
+    setStoredTasksToLocalStorage([...all, ...newTasks]);
+    showToast(`✨ Imported ${newTasks.length} tasks with auto-scheduled study roadmap!`, 'success');
+    closePdfModal();
+    fetchTasks();
+    return;
+  }
+
   fetch('/api/tasks/batch', {
     method: 'POST',
     headers: {
@@ -1791,7 +1805,16 @@ function confirmBatchImportTasks() {
     }
   })
   .catch(err => {
-    showToast('Failed to import tasks: ' + err.message, 'error');
+    const all = getStoredTasksFromLocalStorage();
+    let maxId = all.length > 0 ? Math.max(...all.map(t => t.id)) : 0;
+    const newTasks = selectedTasks.map(t => {
+      maxId++;
+      return { ...t, id: maxId, status: 'Pending', subtopics: t.subtopics || [] };
+    });
+    setStoredTasksToLocalStorage([...all, ...newTasks]);
+    showToast(`✨ Imported ${newTasks.length} tasks with auto-scheduled study roadmap!`, 'success');
+    closePdfModal();
+    fetchTasks();
   });
 }
 
@@ -1807,7 +1830,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const selected = e.target.value;
       document.body.setAttribute('data-theme', selected);
       localStorage.setItem('theme_preference', selected);
+    });
+  }
+
   // Auth Tab Listeners
+
   const authTabLogin = document.getElementById('auth-tab-login');
   const authTabRegister = document.getElementById('auth-tab-register');
   const authTabForgot = document.getElementById('auth-tab-forgot');
