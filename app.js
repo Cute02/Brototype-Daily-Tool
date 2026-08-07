@@ -1165,22 +1165,28 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+function safeAddListener(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener(event, handler);
+  }
+}
+
 // Event Listeners Setup
 document.addEventListener('DOMContentLoaded', () => {
   checkAuthStatus();
   fetchTasks();
 
   // Authentication Handlers
-  document.getElementById('login-modal-btn').addEventListener('click', () => openAuthModal('login'));
-  document.getElementById('close-auth-modal').addEventListener('click', closeAuthModal);
-  document.getElementById('cancel-auth-modal').addEventListener('click', closeAuthModal);
-  document.getElementById('cancel-register-modal').addEventListener('click', closeAuthModal);
-  const cancelOtpBtn = document.getElementById('cancel-otp-modal');
-  if (cancelOtpBtn) cancelOtpBtn.addEventListener('click', closeAuthModal);
-  document.getElementById('logout-btn').addEventListener('click', () => logoutUser());
+  safeAddListener('login-modal-btn', 'click', () => openAuthModal('login'));
+  safeAddListener('close-auth-modal', 'click', closeAuthModal);
+  safeAddListener('cancel-auth-modal', 'click', closeAuthModal);
+  safeAddListener('cancel-register-modal', 'click', closeAuthModal);
+  safeAddListener('cancel-otp-modal', 'click', closeAuthModal);
+  safeAddListener('logout-btn', 'click', () => logoutUser());
 
-  document.getElementById('auth-tab-login').addEventListener('click', () => switchAuthTab('login'));
-  document.getElementById('auth-tab-register').addEventListener('click', () => switchAuthTab('register'));
+  safeAddListener('auth-tab-login', 'click', () => switchAuthTab('login'));
+  safeAddListener('auth-tab-register', 'click', () => switchAuthTab('register'));
 
   // Password vs OTP Mode Toggles
   let activeAuthMode = 'password';
@@ -1194,15 +1200,15 @@ document.addEventListener('DOMContentLoaded', () => {
       activeAuthMode = 'password';
       modePwdBtn.classList.add('active');
       modeOtpBtn.classList.remove('active');
-      pwdContainer.style.display = 'block';
-      otpContainer.style.display = 'none';
+      if (pwdContainer) pwdContainer.style.display = 'block';
+      if (otpContainer) otpContainer.style.display = 'none';
     });
     modeOtpBtn.addEventListener('click', () => {
       activeAuthMode = 'otp';
       modeOtpBtn.classList.add('active');
       modePwdBtn.classList.remove('active');
-      pwdContainer.style.display = 'none';
-      otpContainer.style.display = 'block';
+      if (pwdContainer) pwdContainer.style.display = 'none';
+      if (otpContainer) otpContainer.style.display = 'block';
     });
   }
 
@@ -1211,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (reqOtpBtn) {
     reqOtpBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      const identifier = document.getElementById('login-username').value.trim();
+      const identifier = document.getElementById('login-username')?.value.trim() || '';
       requestOTP(identifier);
     });
   }
@@ -1220,64 +1226,76 @@ document.addEventListener('DOMContentLoaded', () => {
   if (verifyOtpBtn) {
     verifyOtpBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      const identifier = document.getElementById('login-username').value.trim();
-      const otp = document.getElementById('login-otp').value.trim();
+      const identifier = document.getElementById('login-username')?.value.trim() || '';
+      const otp = document.getElementById('login-otp')?.value.trim() || '';
       verifyOTP(identifier, otp);
     });
   }
 
-  document.getElementById('login-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const identifier = document.getElementById('login-username').value.trim();
-    if (activeAuthMode === 'otp') {
-      const otp = document.getElementById('login-otp').value.trim();
-      verifyOTP(identifier, otp);
-    } else {
-      const p = document.getElementById('login-password').value;
-      loginUser(identifier, p);
-    }
-  });
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const identifier = document.getElementById('login-username')?.value.trim() || '';
+      if (activeAuthMode === 'otp') {
+        const otp = document.getElementById('login-otp')?.value.trim() || '';
+        verifyOTP(identifier, otp);
+      } else {
+        const p = document.getElementById('login-password')?.value || '';
+        loginUser(identifier, p);
+      }
+    });
+  }
 
-  document.getElementById('register-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const u = document.getElementById('register-username').value.trim();
-    const p = document.getElementById('register-password').value;
-    const email = document.getElementById('register-email') ? document.getElementById('register-email').value.trim() : '';
-    registerUser(u, p, email);
-  });
+  const regForm = document.getElementById('register-form');
+  if (regForm) {
+    regForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const u = document.getElementById('register-username')?.value.trim() || '';
+      const p = document.getElementById('register-password')?.value || '';
+      const email = document.getElementById('register-email') ? document.getElementById('register-email').value.trim() : '';
+      registerUser(u, p, email);
+    });
+  }
 
   // Add Task Form Handler
-  document.getElementById('add-task-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const title = document.getElementById('task-title').value;
-    const category = document.getElementById('task-category').value;
-    const priority = document.getElementById('task-priority').value;
-    const duration = document.getElementById('task-duration').value;
-    const notes = document.getElementById('task-notes').value;
+  const addTaskForm = document.getElementById('add-task-form');
+  if (addTaskForm) {
+    addTaskForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = document.getElementById('task-title')?.value || '';
+      const category = document.getElementById('task-category')?.value || 'General';
+      const priority = document.getElementById('task-priority')?.value || 'Medium';
+      const duration = document.getElementById('task-duration')?.value || '1 hr';
+      const notes = document.getElementById('task-notes')?.value || '';
 
-    addTask({ title, category, priority, duration, notes, status: 'Pending' });
+      addTask({ title, category, priority, duration, notes, status: 'Pending' });
 
-    document.getElementById('task-title').value = '';
-    document.getElementById('task-notes').value = '';
-  });
+      if (document.getElementById('task-title')) document.getElementById('task-title').value = '';
+      if (document.getElementById('task-notes')) document.getElementById('task-notes').value = '';
+    });
+  }
 
   // Edit Task Form Handler
-  document.getElementById('edit-task-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const id = parseInt(document.getElementById('edit-task-id').value);
-    const title = document.getElementById('edit-task-title').value;
-    const category = document.getElementById('edit-task-category').value;
-    const priority = document.getElementById('edit-task-priority').value;
-    const duration = document.getElementById('edit-task-duration').value;
-    const status = document.getElementById('edit-task-status').value;
-    const notes = document.getElementById('edit-task-notes').value;
+  const editTaskForm = document.getElementById('edit-task-form');
+  if (editTaskForm) {
+    editTaskForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = parseInt(document.getElementById('edit-task-id')?.value || '0');
+      const title = document.getElementById('edit-task-title')?.value || '';
+      const category = document.getElementById('edit-task-category')?.value || 'General';
+      const priority = document.getElementById('edit-task-priority')?.value || 'Medium';
+      const duration = document.getElementById('edit-task-duration')?.value || '1 hr';
+      const status = document.getElementById('edit-task-status')?.value || 'Pending';
+      const notes = document.getElementById('edit-task-notes')?.value || '';
 
-    updateTaskFullDetails(id, { title, category, priority, duration, status, notes });
-    closeEditModal();
-  });
+      updateTaskFullDetails(id, { title, category, priority, duration, status, notes });
+      closeEditModal();
+    });
+  }
 
-  document.getElementById('close-edit-modal').addEventListener('click', closeEditModal);
-  document.getElementById('cancel-edit-modal').addEventListener('click', closeEditModal);
+  safeAddListener('close-edit-modal', 'click', closeEditModal);
+  safeAddListener('cancel-edit-modal', 'click', closeEditModal);
 
   // Filter Tabs
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1290,26 +1308,27 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Sort Select
-  document.getElementById('sort-select').addEventListener('change', (e) => {
+  safeAddListener('sort-select', 'change', (e) => {
     state.currentSort = e.target.value;
     fetchTasks();
   });
 
   // Search Input
   let searchTimeout = null;
-  document.getElementById('search-input').addEventListener('input', (e) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-      state.searchQuery = e.target.value.trim();
-      fetchTasks();
-    }, 300);
-  });
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        state.searchQuery = e.target.value.trim();
+        fetchTasks();
+      }, 300);
+    });
+  }
 
   // Pomodoro Controls
-  const toggleBtn = document.getElementById('pomo-toggle-btn');
-  if (toggleBtn) toggleBtn.addEventListener('click', togglePomodoro);
-
-  document.getElementById('pomo-reset-btn').addEventListener('click', resetPomodoro);
+  safeAddListener('pomo-toggle-btn', 'click', togglePomodoro);
+  safeAddListener('pomo-reset-btn', 'click', resetPomodoro);
 
   const presetSelect = document.getElementById('pomo-preset-select');
   if (presetSelect) {
@@ -1337,28 +1356,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Mentor Email Modal
-  document.getElementById('send-report-btn').addEventListener('click', openMentorEmailModal);
-  document.getElementById('close-email-modal').addEventListener('click', closeMentorEmailModal);
-  document.getElementById('open-gmail-btn').addEventListener('click', sendGmailEmail);
-  document.getElementById('open-mailto-btn').addEventListener('click', sendMailtoEmail);
-  document.getElementById('copy-report-btn').addEventListener('click', copyReportToClipboard);
-  document.getElementById('config-mentor-btn').addEventListener('click', openMentorEmailModal);
+  safeAddListener('send-report-btn', 'click', openMentorEmailModal);
+  safeAddListener('close-email-modal', 'click', closeMentorEmailModal);
+  safeAddListener('open-gmail-btn', 'click', sendGmailEmail);
+  safeAddListener('open-mailto-btn', 'click', sendMailtoEmail);
+  safeAddListener('copy-report-btn', 'click', copyReportToClipboard);
+  safeAddListener('config-mentor-btn', 'click', openMentorEmailModal);
 
   // PDF Import Handlers
-  const importPdfBtn = document.getElementById('import-pdf-btn');
-  if (importPdfBtn) importPdfBtn.addEventListener('click', openPdfModal);
-
-  const importPdfCardBtn = document.getElementById('import-pdf-card-btn');
-  if (importPdfCardBtn) importPdfCardBtn.addEventListener('click', openPdfModal);
-
-  const importPdfInlineBtn = document.getElementById('import-pdf-inline-btn');
-  if (importPdfInlineBtn) importPdfInlineBtn.addEventListener('click', openPdfModal);
-
-  const closePdfBtn = document.getElementById('close-pdf-modal');
-  if (closePdfBtn) closePdfBtn.addEventListener('click', closePdfModal);
-
-  const cancelPdfBtn = document.getElementById('cancel-pdf-modal');
-  if (cancelPdfBtn) cancelPdfBtn.addEventListener('click', closePdfModal);
+  safeAddListener('import-pdf-btn', 'click', openPdfModal);
+  safeAddListener('import-pdf-card-btn', 'click', openPdfModal);
+  safeAddListener('import-pdf-inline-btn', 'click', openPdfModal);
+  safeAddListener('close-pdf-modal', 'click', closePdfModal);
+  safeAddListener('cancel-pdf-modal', 'click', closePdfModal);
 
   const dropZone = document.getElementById('pdf-drop-zone');
   const fileInput = document.getElementById('pdf-file-input');
@@ -1390,22 +1400,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const selectAllBtn = document.getElementById('pdf-select-all-btn');
-  if (selectAllBtn) {
-    selectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.pdf-task-checkbox').forEach(cb => cb.checked = true);
-    });
-  }
+  safeAddListener('pdf-select-all-btn', 'click', () => {
+    document.querySelectorAll('.pdf-task-checkbox').forEach(cb => cb.checked = true);
+  });
 
-  const deselectAllBtn = document.getElementById('pdf-deselect-all-btn');
-  if (deselectAllBtn) {
-    deselectAllBtn.addEventListener('click', () => {
-      document.querySelectorAll('.pdf-task-checkbox').forEach(cb => cb.checked = false);
-    });
-  }
+  safeAddListener('pdf-deselect-all-btn', 'click', () => {
+    document.querySelectorAll('.pdf-task-checkbox').forEach(cb => cb.checked = false);
+  });
 
-  const confirmImportBtn = document.getElementById('confirm-import-tasks-btn');
-  if (confirmImportBtn) confirmImportBtn.addEventListener('click', confirmBatchImportTasks);
+  safeAddListener('confirm-import-tasks-btn', 'click', confirmBatchImportTasks);
 
   const pdfModalOverlay = document.getElementById('pdf-import-modal');
   if (pdfModalOverlay) {
@@ -1438,9 +1441,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const fetchUrlBtn = document.getElementById('fetch-url-doc-btn');
-  if (fetchUrlBtn) fetchUrlBtn.addEventListener('click', handleUrlDocFetch);
+  safeAddListener('fetch-url-doc-btn', 'click', handleUrlDocFetch);
 });
+
 
 // PDF & Document Syllabus Import Functions
 let extractedPdfTasks = [];
