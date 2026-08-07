@@ -119,8 +119,26 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(response)
             return
 
-        # Serve static files
+        # Security check: Block public HTTP access to sensitive files, dotfiles, data stores, and source code
+        clean_path = path.lstrip("/")
+        filename = Path(clean_path).name.lower()
+        parts = [p.lower() for p in clean_path.split("/") if p]
+
+        is_forbidden = (
+            any(p.startswith(".") for p in parts) or
+            filename.startswith(".") or
+            filename in ("users.json", "requirements.txt", "server.py", "main.py") or
+            filename.startswith("daily_tasks") or
+            (filename.endswith((".json", ".bak", ".env", ".py", ".bat", ".sh", ".tmp", ".db", ".log", ".md", ".key", ".pem")) and filename != "manifest.json")
+        )
+
+        if is_forbidden:
+            self._send_error_json("Access forbidden: Sensitive or restricted file", status=403)
+            return
+
+        # Serve permitted static files
         return super().do_GET()
+
 
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length", 0))
@@ -198,6 +216,61 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": True, "message": "Logged out successfully"})
             return
 
+        if self.path == "/api/auth/forgot-password":
+            try:
+                identifier = data.get("identifier") or data.get("username") or data.get("email", "")
+                if not identifier:
+                    raise ValueError("Username or Email is required.")
+                res = auth_manager.request_password_reset(identifier)
+                self._send_json({
+                    "success": True,
+                    "message": f"Verification link & OTP generated for {res['username']} ({res['email']}).",
+                    "username": res["username"],
+                    "email": res["email"],
+                    "otp": res["otp"],
+                    "verification_link": res["verification_link"]
+                })
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
+            return
+
+        if self.path == "/api/auth/verify-reset-token":
+            try:
+                identifier = data.get("identifier", "")
+                reset_token = data.get("token", "")
+                res = auth_manager.verify_reset_token(identifier, reset_token)
+                self._send_json({
+                    "success": True,
+                    "valid": True,
+                    "username": res["username"],
+                    "email": res.get("email", "")
+                })
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
+            return
+
+        if self.path == "/api/auth/reset-password":
+            try:
+                identifier = data.get("identifier") or data.get("username", "")
+                new_password = data.get("new_password", "")
+                reset_token = data.get("token", None)
+                otp_code = data.get("otp", None)
+                res = auth_manager.reset_password_with_token_or_otp(
+                    identifier=identifier,
+                    new_password=new_password,
+                    reset_token=reset_token,
+                    otp_code=otp_code
+                )
+                self._send_json({
+                    "success": True,
+                    "message": "Password reset successfully! Redirecting to Sign In...",
+                    "username": res["username"]
+                })
+            except Exception as e:
+                self._send_error_json(str(e), status=400)
+            return
+
+
         if self.path == "/api/tasks":
             try:
                 title = data.get("title", "")
@@ -227,6 +300,8 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/api/pdf/import":
             try:
                 filename = data.get("filename", "module.pdf") if isinstance(data, dict) else "module.pdf"
+                hf_token = data.get("hf_token", None) if isinstance(data, dict) else None
+                hf_model = data.get("hf_model", None) if isinstance(data, dict) else None
                 pdf_bytes = b""
 
                 if isinstance(data, dict) and "doc_url" in data and data["doc_url"].strip():
@@ -239,7 +314,12 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 else:
                     pdf_bytes = body
 
-                candidate_tasks = parse_pdf_to_tasks(pdf_bytes, filename=filename)
+                candidate_tasks = parse_pdf_to_tasks(
+                    pdf_bytes,
+                    filename=filename,
+                    hf_token=hf_token,
+                    hf_model=hf_model
+                )
                 self._send_json({
                     "success": True,
                     "filename": filename,
@@ -249,6 +329,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_error_json(f"Failed to parse document: {str(e)}", status=400)
             return
+
 
         if self.path == "/api/tasks/batch":
             try:

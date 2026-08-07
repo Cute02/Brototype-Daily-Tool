@@ -137,6 +137,101 @@ class AuthManager:
 
         return {"username": user["username"]}
 
+    def request_password_reset(self, identifier: str) -> Dict[str, Any]:
+        """Generate a password reset token and OTP for a user by username or email."""
+        username_key = self._find_user_key(identifier)
+        if not username_key:
+            raise ValueError("User with specified username or email not found.")
+
+        user = self.users[username_key]
+        otp_code = f"{secrets.randbelow(900000) + 100000}"
+        reset_token = secrets.token_urlsafe(32)
+        expiry = time.time() + 900  # valid for 15 minutes
+
+        user["reset_token"] = reset_token
+        user["otp"] = otp_code
+        user["reset_expiry"] = expiry
+        user["otp_expiry"] = expiry
+        self._save_users()
+
+        user_email = user.get("email", "") or f"{user['username']}@brototype.com"
+        verification_link = f"http://localhost:8000/?action=reset-password&token={reset_token}&identifier={urllib.parse.quote(user['username'])}"
+
+        return {
+            "username": user["username"],
+            "email": user_email,
+            "otp": otp_code,
+            "reset_token": reset_token,
+            "verification_link": verification_link
+        }
+
+    def verify_reset_token(self, identifier: str, reset_token: str) -> Dict[str, Any]:
+        """Verify if a password reset token is valid and not expired."""
+        username_key = self._find_user_key(identifier)
+        if not username_key:
+            raise ValueError("User not found.")
+
+        user = self.users[username_key]
+        saved_token = user.get("reset_token")
+        expiry = user.get("reset_expiry", 0)
+
+        if not saved_token or not secrets.compare_digest(saved_token, reset_token.strip()):
+            raise ValueError("Invalid or expired reset token.")
+        if time.time() > expiry:
+            raise ValueError("Reset token has expired. Please request a new verification link.")
+
+        return {"username": user["username"], "email": user.get("email", "")}
+
+    def reset_password_with_token_or_otp(
+        self,
+        identifier: str,
+        new_password: str,
+        reset_token: Optional[str] = None,
+        otp_code: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Reset password using either a reset token or OTP code."""
+        if not new_password or len(new_password) < 4:
+            raise ValueError("New password must be at least 4 characters long.")
+
+        username_key = self._find_user_key(identifier)
+        if not username_key:
+            raise ValueError("User not found.")
+
+        user = self.users[username_key]
+        expiry = user.get("reset_expiry") or user.get("otp_expiry") or 0
+
+        if not expiry or time.time() > float(expiry):
+            raise ValueError("Verification link / OTP has expired or was not requested. Please request a new one.")
+
+        token_valid = False
+        if reset_token and user.get("reset_token"):
+            token_valid = secrets.compare_digest(str(user.get("reset_token", "")), str(reset_token).strip())
+
+        otp_valid = False
+        if otp_code and user.get("otp"):
+            otp_valid = secrets.compare_digest(str(user.get("otp", "")).strip(), str(otp_code).strip())
+
+        if not token_valid and not otp_valid:
+            raise ValueError("Invalid reset token or OTP code. Please check your verification link or OTP code.")
+
+
+        # Update password hash with new salt
+        new_salt = generate_salt()
+        new_hash = hash_password(new_password, new_salt)
+
+        user["salt"] = new_salt
+        user["password_hash"] = new_hash
+
+        # Clear reset tokens & OTP
+        user.pop("reset_token", None)
+        user.pop("reset_expiry", None)
+        user.pop("otp", None)
+        user.pop("otp_expiry", None)
+
+        self._save_users()
+        return {"username": user["username"], "email": user.get("email", "")}
+
+
     def create_session(self, username: str) -> str:
         username = username.strip().lower()
         token = secrets.token_hex(32)

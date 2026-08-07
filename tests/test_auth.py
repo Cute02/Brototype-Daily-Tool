@@ -73,3 +73,54 @@ def test_email_login_and_otp_auth(temp_users_file):
     res_otp = auth.verify_otp("alex_dev", otp)
     assert res_otp["username"] == "alex_dev"
 
+
+def test_forgot_password_and_token_otp_reset(temp_users_file):
+    auth = AuthManager(file_path=temp_users_file)
+    auth.register_user("student_user", "oldPassword123", email="student@brototype.com")
+
+    # Request password reset by email
+    reset_data = auth.request_password_reset("student@brototype.com")
+    assert reset_data["username"] == "student_user"
+    assert reset_data["email"] == "student@brototype.com"
+    assert len(reset_data["otp"]) == 6
+    assert len(reset_data["reset_token"]) > 20
+    assert "action=reset-password" in reset_data["verification_link"]
+
+    # Verify reset token
+    token_val = auth.verify_reset_token("student_user", reset_data["reset_token"])
+    assert token_val["username"] == "student_user"
+
+    # Invalid token fails
+    with pytest.raises(ValueError, match="Invalid or expired"):
+        auth.verify_reset_token("student_user", "invalid_token_123")
+
+    # Reset password with token
+    reset_res = auth.reset_password_with_token_or_otp(
+        identifier="student@brototype.com",
+        new_password="brandNewPassword456",
+        reset_token=reset_data["reset_token"]
+    )
+    assert reset_res["username"] == "student_user"
+
+    # Old password should no longer authenticate
+    with pytest.raises(ValueError, match="Invalid username/email or password"):
+        auth.authenticate_user("student_user", "oldPassword123")
+
+    # New password authenticates cleanly
+    auth_success = auth.authenticate_user("student_user", "brandNewPassword456")
+    assert auth_success["username"] == "student_user"
+
+    # Reset password with OTP test
+    reset_data_2 = auth.request_password_reset("student_user")
+    reset_res_2 = auth.reset_password_with_token_or_otp(
+        identifier="student_user",
+        new_password="anotherNewPassword789",
+        otp_code=reset_data_2["otp"]
+    )
+    assert reset_res_2["username"] == "student_user"
+
+    # Verify authentication with the second new password
+    auth_success_2 = auth.authenticate_user("student_user", "anotherNewPassword789")
+    assert auth_success_2["username"] == "student_user"
+
+

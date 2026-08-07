@@ -190,7 +190,67 @@ function getAuthHeaders() {
   return headers;
 }
 
-// REST API Methods
+// GitHub Pages Client-Side Storage Engine
+const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io') || window.location.protocol === 'file:';
+
+function getStoredTasksFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem('brototype_daily_tasks');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  
+  // Default starter tasks for GitHub Pages live demo
+  const defaults = [
+    {
+      id: 1,
+      title: "Core Python Programming & Data Structures",
+      category: "Module: Python Basics",
+      priority: "High",
+      duration: "2 hrs",
+      notes: "Auto-generated syllabus checklist for Brototype daily tracking.",
+      status: "In Progress",
+      is_highlighted: true,
+      subtopics: [
+        { id: "sub_1", title: "Variables and Dynamic Typing", completed: true },
+        { id: "sub_2", title: "Control Flow & Loop Constructs", completed: true },
+        { id: "sub_3", title: "Lists, Dictionaries and Set Comprehensions", completed: false }
+      ]
+    },
+    {
+      id: 2,
+      title: "REST API & HTTP Protocol Fundamentals",
+      category: "Module: Backend Architecture",
+      priority: "Medium",
+      duration: "1 hr",
+      notes: "Understanding status codes, headers, and request methods.",
+      status: "Pending",
+      is_highlighted: false,
+      subtopics: [
+        { id: "sub_1", title: "HTTP Request Methods (GET, POST, PUT, DELETE)", completed: false },
+        { id: "sub_2", title: "JSON Payload Serialization", completed: false }
+      ]
+    }
+  ];
+  localStorage.setItem('brototype_daily_tasks', JSON.stringify(defaults));
+  return defaults;
+}
+
+function setStoredTasksToLocalStorage(tasks) {
+  try {
+    localStorage.setItem('brototype_daily_tasks', JSON.stringify(tasks));
+  } catch (e) {}
+}
+
+function calculateLocalStorageStats(tasks) {
+  const total = tasks.length;
+  const completed = tasks.filter(t => t.status === 'Completed').length;
+  const inProgress = tasks.filter(t => t.status === 'In Progress').length;
+  const pending = tasks.filter(t => t.status === 'Pending').length;
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, inProgress, pending, completionPercentage: percent };
+}
+
+// REST API Methods with GitHub Pages LocalStorage Fallback
 async function fetchTasks() {
   try {
     let url = `/api/tasks?sort_by=${state.currentSort}`;
@@ -212,6 +272,22 @@ async function fetchTasks() {
     renderTodoList();
     renderPomoTaskSelect();
   } catch (err) {
+    if (IS_GITHUB_PAGES || err.message.includes('Failed to load') || err.name === 'TypeError') {
+      let tasks = getStoredTasksFromLocalStorage();
+      if (state.currentFilter !== 'ALL') {
+        tasks = tasks.filter(t => t.status === state.currentFilter);
+      }
+      if (state.searchQuery) {
+        const q = state.searchQuery.toLowerCase();
+        tasks = tasks.filter(t => t.title.toLowerCase().includes(q) || (t.category && t.category.toLowerCase().includes(q)));
+      }
+      state.tasks = tasks;
+      state.stats = calculateLocalStorageStats(getStoredTasksFromLocalStorage());
+      renderStats();
+      renderTodoList();
+      renderPomoTaskSelect();
+      return;
+    }
     showToast(`Error: ${err.message}`, 'error');
   }
 }
@@ -227,6 +303,16 @@ async function addTask(taskData) {
     showToast('✓ Task created successfully!', 'success');
     await fetchTasks();
   } catch (err) {
+    if (IS_GITHUB_PAGES || err.name === 'TypeError') {
+      const allTasks = getStoredTasksFromLocalStorage();
+      const newId = allTasks.length > 0 ? Math.max(...allTasks.map(t => t.id)) + 1 : 1;
+      const newTask = { id: newId, status: 'Pending', subtopics: [], ...taskData };
+      allTasks.push(newTask);
+      setStoredTasksToLocalStorage(allTasks);
+      showToast('✓ Task created successfully!', 'success');
+      await fetchTasks();
+      return;
+    }
     showToast(`Error: ${err.message}`, 'error');
   }
 }
@@ -249,6 +335,18 @@ async function updateTaskStatus(id, status, notes = null) {
     showToast(`✓ Status updated to ${status}`, 'success');
     await fetchTasks();
   } catch (err) {
+    if (IS_GITHUB_PAGES || err.name === 'TypeError') {
+      const allTasks = getStoredTasksFromLocalStorage();
+      const t = allTasks.find(x => x.id === id);
+      if (t) {
+        t.status = status;
+        if (notes !== null) t.notes = notes;
+        setStoredTasksToLocalStorage(allTasks);
+        showToast(`✓ Status updated to ${status}`, 'success');
+        await fetchTasks();
+        return;
+      }
+    }
     showToast(`Error: ${err.message}`, 'error');
   }
 }
@@ -269,6 +367,17 @@ async function updateTaskFullDetails(id, details) {
     showToast('✓ Task updated successfully!', 'success');
     await fetchTasks();
   } catch (err) {
+    if (IS_GITHUB_PAGES || err.name === 'TypeError') {
+      const allTasks = getStoredTasksFromLocalStorage();
+      const idx = allTasks.findIndex(x => x.id === id);
+      if (idx !== -1) {
+        allTasks[idx] = { ...allTasks[idx], ...details };
+        setStoredTasksToLocalStorage(allTasks);
+        showToast('✓ Task updated successfully!', 'success');
+        await fetchTasks();
+        return;
+      }
+    }
     showToast(`Error: ${err.message}`, 'error');
   }
 }
@@ -472,24 +581,122 @@ function closeAuthModal() {
 function switchAuthTab(tab) {
   const loginTab = document.getElementById('auth-tab-login');
   const registerTab = document.getElementById('auth-tab-register');
+  const forgotTab = document.getElementById('auth-tab-forgot');
   const loginForm = document.getElementById('login-form');
   const registerForm = document.getElementById('register-form');
+  const forgotForm = document.getElementById('forgot-password-form');
   const title = document.getElementById('auth-modal-title');
+
+  if (loginTab) loginTab.classList.remove('active');
+  if (registerTab) registerTab.classList.remove('active');
+  if (forgotTab) forgotTab.classList.remove('active');
+  if (loginForm) loginForm.style.display = 'none';
+  if (registerForm) registerForm.style.display = 'none';
+  if (forgotForm) forgotForm.style.display = 'none';
 
   if (tab === 'login') {
     if (loginTab) loginTab.classList.add('active');
-    if (registerTab) registerTab.classList.remove('active');
     if (loginForm) loginForm.style.display = 'block';
-    if (registerForm) registerForm.style.display = 'none';
     if (title) title.innerText = '🔐 Sign In to Brototype Tasks';
-  } else {
+  } else if (tab === 'register') {
     if (registerTab) registerTab.classList.add('active');
-    if (loginTab) loginTab.classList.remove('active');
     if (registerForm) registerForm.style.display = 'block';
-    if (loginForm) loginForm.style.display = 'none';
     if (title) title.innerText = '✨ Create Brototype Account';
+  } else if (tab === 'forgot') {
+    if (forgotTab) forgotTab.classList.add('active');
+    if (forgotForm) forgotForm.style.display = 'block';
+    if (title) title.innerText = '🔑 Reset Your Password';
   }
 }
+
+async function requestForgotPassword(identifier) {
+  if (!identifier) {
+    showToast('Please enter your Username or Email Address', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Failed to request password reset");
+    }
+
+    const badge = document.getElementById('forgot-link-badge');
+    const otpEl = document.getElementById('forgot-demo-otp');
+    const linkEl = document.getElementById('forgot-demo-link');
+    const step2 = document.getElementById('forgot-step-2');
+
+    if (badge && otpEl && linkEl) {
+      otpEl.innerText = data.otp;
+      linkEl.href = data.verification_link;
+      linkEl.innerText = data.verification_link;
+      linkEl.onclick = (e) => {
+        e.preventDefault();
+        const otpInput = document.getElementById('forgot-otp-input');
+        if (otpInput) otpInput.value = data.reset_token;
+        if (step2) step2.style.display = 'block';
+        showToast('Verification token populated into reset form!', 'info');
+      };
+      badge.style.display = 'block';
+    }
+
+    if (step2) step2.style.display = 'block';
+    showToast(`📩 Verification link & OTP generated for ${data.username}`, 'success');
+  } catch (err) {
+    showToast(`Reset Error: ${err.message}`, 'error');
+  }
+}
+
+async function resetPasswordWithToken(identifier, codeOrToken, newPassword, confirmPassword) {
+  if (!identifier || !codeOrToken || !newPassword) {
+    showToast('Please complete all required fields', 'error');
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast('New passwords do not match', 'error');
+    return;
+  }
+  try {
+    const isOtp = /^\d{6}$/.test(codeOrToken.trim());
+    const payload = {
+      identifier: identifier,
+      new_password: newPassword,
+      ...(isOtp ? { otp: codeOrToken.trim() } : { token: codeOrToken.trim() })
+    };
+
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Password reset failed");
+    }
+
+    showToast(`🔒 ${data.message}`, 'success');
+    
+    // Auto-fill username in login form and switch to login tab for Google Passwords prompt
+    const loginUser = document.getElementById('login-username');
+    const loginPass = document.getElementById('login-password');
+    if (loginUser) loginUser.value = data.username;
+    if (loginPass) loginPass.value = newPassword;
+
+    // Clear URL params if resetting via link
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    switchAuthTab('login');
+  } catch (err) {
+    showToast(`Reset Failed: ${err.message}`, 'error');
+  }
+}
+
 
 // UI Rendering Functions
 function renderStats() {
@@ -536,8 +743,19 @@ function renderStats() {
   }
 }
 
-function renderTodoList() {
-  const container = document.getElementById('todo-list');
+function deriveTopicState(subtopics) {
+  if (!subtopics || subtopics.length === 0) return 'unchecked';
+  const total = subtopics.length;
+  const completedCount = subtopics.filter(s => Boolean(s.completed)).length;
+  if (completedCount === total) return 'checked';
+  if (completedCount > 0) return 'indeterminate';
+  return 'unchecked';
+}
+
+function renderTasks() {
+  const container = document.getElementById('task-list-container');
+  if (!container) return;
+
   container.innerHTML = '';
 
   if (!state.tasks || state.tasks.length === 0) {
@@ -549,15 +767,19 @@ function renderTodoList() {
   }
 
   state.tasks.forEach(task => {
-    const isCompleted = task.status === 'Completed';
-    const prioClass = task.priority.toLowerCase();
     const subtopics = task.subtopics || [];
+    const derivedState = deriveTopicState(subtopics);
+    let isCompleted = task.status === 'Completed';
+    if (subtopics.length > 0) {
+      isCompleted = (derivedState === 'checked');
+    }
+    const prioClass = task.priority.toLowerCase();
     const completedSubtopics = subtopics.filter(s => s.completed).length;
 
-    let subtopicsHtml = `
+    let subtopicsHtml = subtopics.length > 0 ? `
       <div class="subtopics-container">
         <div class="subtopics-header">
-          <span>Subtopics Checklist</span>
+          <span>📑 Extracted Subtopics Checklist</span>
           <span>${completedSubtopics}/${subtopics.length} Done</span>
         </div>
         ${subtopics.map((sub, sIdx) => `
@@ -567,18 +789,14 @@ function renderTodoList() {
             <button class="btn-del-sub" data-task-id="${task.id}" data-sub-idx="${sIdx}" style="background:transparent;border:none;color:#f43f5e;cursor:pointer;opacity:0.7;">✖</button>
           </div>
         `).join('')}
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <input type="text" id="add-sub-input-${task.id}" placeholder="➕ Add subtopic..." style="flex:1;padding:4px 8px;font-size:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:white;">
-          <button class="btn btn-sm btn-primary btn-add-sub" data-task-id="${task.id}" style="padding:3px 10px;font-size:11px;">Add</button>
-        </div>
       </div>
-    `;
+    ` : '';
 
     const item = document.createElement('div');
     item.className = `task-item ${isCompleted ? 'completed' : ''}`;
     item.innerHTML = `
-      <div class="task-checkbox" data-id="${task.id}" data-current="${task.status}">
-        ${isCompleted ? '✓' : ''}
+      <div style="display: flex; align-items: center; justify-content: center; width: 24px;">
+        <input type="checkbox" class="topic-checkbox-input" data-id="${task.id}" ${isCompleted ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer; accent-color: #6366f1;">
       </div>
       <div class="task-body">
         <div class="task-header-row">
@@ -603,7 +821,28 @@ function renderTodoList() {
       </div>
     `;
 
-    // Handle Subtopic Checkbox Toggles
+    // Apply native DOM indeterminate property to topic checkbox input
+    const topicCbInput = item.querySelector('.topic-checkbox-input');
+    if (topicCbInput && subtopics.length > 0) {
+      topicCbInput.indeterminate = (derivedState === 'indeterminate');
+    }
+
+    // 1. Topic Checkbox Click -> Cascades to ALL subtopics
+    if (topicCbInput) {
+      topicCbInput.addEventListener('change', (e) => {
+        const checkAll = e.target.checked;
+        const updatedSubtopics = (task.subtopics || []).map(s => ({ ...s, completed: checkAll }));
+        const newStatus = checkAll ? 'Completed' : 'Pending';
+
+        if (checkAll) {
+          triggerConfettiBurst(e.clientX, e.clientY);
+        }
+
+        updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
+      });
+    }
+
+    // 2. Subtopic Checkbox Click -> Recomputes parent topic state and status
     item.querySelectorAll('.subtopic-checkbox').forEach(cb => {
       cb.addEventListener('change', (e) => {
         const subIdx = parseInt(e.target.getAttribute('data-sub-idx'));
@@ -616,17 +855,13 @@ function renderTodoList() {
           return { ...s };
         });
 
-        const total = updatedSubtopics.length;
-        const numDone = updatedSubtopics.filter(s => s.completed).length;
-        let newStatus = task.status;
-
-        if (numDone === total) {
+        const newDerivedState = deriveTopicState(updatedSubtopics);
+        let newStatus = 'Pending';
+        if (newDerivedState === 'checked') {
           newStatus = 'Completed';
           triggerConfettiBurst(e.clientX, e.clientY);
-        } else if (numDone > 0) {
+        } else if (newDerivedState === 'indeterminate') {
           newStatus = 'In Progress';
-        } else {
-          newStatus = 'Pending';
         }
 
         updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
@@ -637,50 +872,28 @@ function renderTodoList() {
       btn.addEventListener('click', (e) => {
         const subIdx = parseInt(e.currentTarget.getAttribute('data-sub-idx'));
         const updatedSubtopics = task.subtopics.filter((_, i) => i !== subIdx);
-        const total = updatedSubtopics.length;
-        const numDone = updatedSubtopics.filter(s => s.completed).length;
-        let newStatus = task.status;
-        if (numDone === total && total > 0) newStatus = 'Completed';
-        else if (numDone > 0) newStatus = 'In Progress';
-        else newStatus = 'Pending';
+        const newDerivedState = deriveTopicState(updatedSubtopics);
+        let newStatus = 'Pending';
+        if (newDerivedState === 'checked') newStatus = 'Completed';
+        else if (newDerivedState === 'indeterminate') newStatus = 'In Progress';
 
         updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
       });
-    });
-
-    item.querySelectorAll('.btn-add-sub').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const input = item.querySelector(`#add-sub-input-${task.id}`);
-        if (!input || !input.value.trim()) return;
-        const newTitle = input.value.trim();
-        const updatedSubtopics = [...(task.subtopics || []), { id: `sub_${(task.subtopics || []).length + 1}`, title: newTitle, completed: false }];
-        
-        const total = updatedSubtopics.length;
-        const numDone = updatedSubtopics.filter(s => s.completed).length;
-        let newStatus = task.status;
-        if (numDone === total && total > 0) newStatus = 'Completed';
-        else if (numDone > 0) newStatus = 'In Progress';
-        else newStatus = 'Pending';
-
-        updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: newStatus });
-      });
-    });
-
-    item.querySelector('.task-checkbox').addEventListener('click', (e) => {
-      const current = e.currentTarget.getAttribute('data-current');
-      const nextStatus = current === 'Completed' ? 'Pending' : 'Completed';
-      if (nextStatus === 'Completed') {
-        triggerConfettiBurst(e.clientX, e.clientY);
-      }
-      updateTaskStatus(task.id, nextStatus);
     });
 
     item.querySelector('.status-select').addEventListener('change', (e) => {
-      if (e.target.value === 'Completed') {
+      const selectedStatus = e.target.value;
+      let updatedSubtopics = task.subtopics || [];
+
+      if (selectedStatus === 'Completed') {
+        updatedSubtopics = updatedSubtopics.map(s => ({ ...s, completed: true }));
         const rect = e.target.getBoundingClientRect();
         triggerConfettiBurst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      } else if (selectedStatus === 'Pending') {
+        updatedSubtopics = updatedSubtopics.map(s => ({ ...s, completed: false }));
       }
-      updateTaskStatus(task.id, e.target.value);
+
+      updateTaskFullDetails(task.id, { subtopics: updatedSubtopics, status: selectedStatus });
     });
 
     item.querySelector('.btn-edit').addEventListener('click', () => {
@@ -1594,6 +1807,63 @@ document.addEventListener('DOMContentLoaded', () => {
       const selected = e.target.value;
       document.body.setAttribute('data-theme', selected);
       localStorage.setItem('theme_preference', selected);
+  // Auth Tab Listeners
+  const authTabLogin = document.getElementById('auth-tab-login');
+  const authTabRegister = document.getElementById('auth-tab-register');
+  const authTabForgot = document.getElementById('auth-tab-forgot');
+  const forgotPassLink = document.getElementById('forgot-password-link');
+  const cancelForgotModal = document.getElementById('cancel-forgot-modal');
+
+  if (authTabLogin) authTabLogin.addEventListener('click', () => switchAuthTab('login'));
+  if (authTabRegister) authTabRegister.addEventListener('click', () => switchAuthTab('register'));
+  if (authTabForgot) authTabForgot.addEventListener('click', () => switchAuthTab('forgot'));
+  if (forgotPassLink) forgotPassLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    openAuthModal('forgot');
+  });
+  if (cancelForgotModal) cancelForgotModal.addEventListener('click', closeAuthModal);
+
+  // Send Reset Link & OTP button
+  const sendResetBtn = document.getElementById('send-reset-link-btn');
+  if (sendResetBtn) {
+    sendResetBtn.addEventListener('click', () => {
+      const identifier = document.getElementById('forgot-identifier')?.value.trim();
+      requestForgotPassword(identifier);
     });
   }
+
+  // Forgot Password Form submit
+  const forgotForm = document.getElementById('forgot-password-form');
+  if (forgotForm) {
+    forgotForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const identifier = document.getElementById('forgot-identifier')?.value.trim();
+      const codeOrToken = document.getElementById('forgot-otp-input')?.value.trim();
+      const newPassword = document.getElementById('forgot-new-password')?.value;
+      const confirmPassword = document.getElementById('forgot-confirm-password')?.value;
+      resetPasswordWithToken(identifier, codeOrToken, newPassword, confirmPassword);
+    });
+  }
+
+  // Check URL query parameters for reset link (?action=reset-password&token=...&identifier=...)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
+    const token = urlParams.get('token');
+    const identifier = urlParams.get('identifier');
+
+    if (action === 'reset-password' && token) {
+      openAuthModal('forgot');
+      const idInput = document.getElementById('forgot-identifier');
+      const otpInput = document.getElementById('forgot-otp-input');
+      const step2 = document.getElementById('forgot-step-2');
+
+      if (idInput && identifier) idInput.value = identifier;
+      if (otpInput) otpInput.value = token;
+      if (step2) step2.style.display = 'block';
+
+      showToast('🔑 Verification link detected! Please enter your new password below.', 'info');
+    }
+  } catch (err) {}
 });
+

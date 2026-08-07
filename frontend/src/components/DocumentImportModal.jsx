@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getApiUrl } from '../config/api';
 
 export default function DocumentImportModal({ isOpen, onClose, onBatchImport, showToast, getAuthHeaders }) {
   const [docUrl, setDocUrl] = useState('');
@@ -21,7 +22,7 @@ export default function DocumentImportModal({ isOpen, onClose, onBatchImport, sh
     const reader = new FileReader();
     reader.onload = (e) => {
       const base64Data = e.target.result.split(',')[1];
-      fetch('/api/pdf/import', {
+      fetch(getApiUrl('/api/pdf/import'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,7 +57,8 @@ export default function DocumentImportModal({ isOpen, onClose, onBatchImport, sh
     }
 
     setIsLoading(true);
-    fetch('/api/pdf/import', {
+    fetch(getApiUrl('/api/pdf/import'), {
+
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

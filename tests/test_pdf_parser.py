@@ -88,3 +88,86 @@ def test_subtopic_extraction_bullet_and_colon():
     assert "Lists" in sub2_titles
     assert "Dictionaries" in sub2_titles
 
+
+def test_huggingface_ai_subtopic_extraction_mock(monkeypatch):
+    from src.pdf_parser import extract_subtopics_with_hf_ai, parse_pdf_to_tasks, _chunk_text, _validate_and_parse_hf_json
+
+    mock_ai_json = {
+        "topics": [
+            {
+                "title": "Machine Learning Fundamentals",
+                "subtopics": ["Supervised Learning", "Unsupervised Learning", "Neural Networks"]
+            },
+            {
+                "title": "Deep Learning Frameworks",
+                "subtopics": ["PyTorch Architecture", "TensorFlow Tensors"]
+            }
+        ]
+    }
+
+    class MockResponse:
+        def read(self):
+            import json
+            return json.dumps([{"generated_text": json.dumps(mock_ai_json)}]).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    def mock_urlopen(req, timeout=20):
+        return MockResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+
+    raw_text = "Machine Learning Course Content..."
+    tasks = extract_subtopics_with_hf_ai(raw_text, filename="ml_syllabus.pdf", hf_token="hf_mock_token_123")
+
+    assert tasks is not None
+    assert len(tasks) == 2
+    titles = [t["title"] for t in tasks]
+    assert "Machine Learning Fundamentals" in titles
+    assert "Deep Learning Frameworks" in titles
+
+    # Verify chunking helper
+    long_text = "Line text\n" * 500
+    chunks = _chunk_text(long_text, max_chars=1000)
+    assert len(chunks) > 1
+
+    # Verify JSON shape validator
+    parsed = _validate_and_parse_hf_json('{"topics": [{"title": "Python", "subtopics": ["Lists"]}]}')
+    assert len(parsed) == 1
+    assert parsed[0]["title"] == "Python"
+    assert parsed[0]["subtopics"] == ["Lists"]
+
+
+def test_formatting_hierarchy_extraction():
+    from src.pdf_parser import extract_formatting_hierarchy
+
+    spans = [
+        {"text": "1. Advanced Python Programming", "size": 18.0, "is_bold": True},
+        {"text": "Variables and Type Annotations", "size": 11.0, "is_bold": False},
+        {"text": "Generators and Iterators", "size": 11.0, "is_bold": False},
+        {"text": "2. Web Development Frameworks", "size": 18.0, "is_bold": True},
+        {"text": "FastAPI Async Endpoints", "size": 11.0, "is_bold": False},
+        {"text": "SQLAlchemy ORM Models", "size": 11.0, "is_bold": False},
+    ]
+
+    tasks = extract_formatting_hierarchy(spans, filename="python_advanced.pdf")
+
+    assert len(tasks) == 2
+    assert tasks[0]["title"] == "Advanced Python Programming"
+    assert len(tasks[0]["subtopics"]) == 2
+    assert tasks[0]["subtopics"][0]["title"] == "Variables and Type Annotations"
+    assert tasks[0]["subtopics"][1]["title"] == "Generators and Iterators"
+
+    assert tasks[1]["title"] == "Web Development Frameworks"
+    assert len(tasks[1]["subtopics"]) == 2
+    assert tasks[1]["subtopics"][0]["title"] == "FastAPI Async Endpoints"
+
+    assert parsed[0]["title"] == "Python"
+    assert parsed[0]["subtopics"] == ["Lists"]
+
+
+

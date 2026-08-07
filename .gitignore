@@ -9,3 +9,19 @@ __pycache__/
 users.json
 daily_tasks_*.json
 
+# Environment variables & Sensitive credentials
+.env
+.env.*
+.env.local
+*.key
+*.pem
+secrets.*
+
+# Custom doc rules
+Todo.md
+GEMINI.md
+
+.vscode/
+.idea/
+node_modules/
+dist/

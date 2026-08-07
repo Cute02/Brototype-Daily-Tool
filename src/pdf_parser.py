@@ -111,22 +111,262 @@ def extract_docx_text(docx_bytes: bytes) -> str:
         return ""
 
 
-def extract_text_and_highlights_from_bytes(content_bytes: bytes, filename: str = "") -> Tuple[str, Set[str]]:
-    """Determine document format and return extracted text and bold/highlight spans."""
-    fn_lower = filename.lower()
-    
-    if fn_lower.endswith(".docx"):
-        text = extract_docx_text(content_bytes)
-        return text, set()
-    
-    if fn_lower.endswith(".pdf") or content_bytes.startswith(b"%PDF"):
-        return extract_pdf_spans_and_highlights(content_bytes)
-    
+try:
+    import fitz  # PyMuPDF
+    FITZ_AVAILABLE = True
+except ImportError:
+    FITZ_AVAILABLE = False
+
+try:
+    import docx
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+
+
+def extract_formatted_spans_from_pdf(pdf_bytes: bytes) -> List[Dict[str, Any]]:
+    """Extract line text, font size, and bold flag from PDF using PyMuPDF or pypdf."""
+    if not pdf_bytes:
+        return []
+
+    spans = []
+
+    if FITZ_AVAILABLE:
+        try:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            for page in doc:
+                blocks = page.get_text("dict").get("blocks", [])
+                for b in blocks:
+                    for line in b.get("lines", []):
+                        line_text = ""
+                        max_size = 0.0
+                        is_bold = False
+                        for s in line.get("spans", []):
+                            t = s.get("text", "").strip()
+                            if not t:
+                                continue
+                            line_text += (" " if line_text else "") + t
+                            sz = float(s.get("size", 0.0))
+                            if sz > max_size:
+                                max_size = sz
+                            font_name = str(s.get("font", "")).lower()
+                            flags = s.get("flags", 0)
+                            if (flags & (1 << 4)) or any(b_kw in font_name for b_kw in ["bold", "black", "heavy", "bd", "b+"]):
+                                is_bold = True
+
+                        if line_text:
+                            spans.append({"text": line_text, "size": max_size, "is_bold": is_bold})
+            if spans:
+                return spans
+        except Exception as e:
+            print(f"[PDF Format Parser Warning] PyMuPDF fitz parsing fallback: {e}")
+
+    if PYPDF_AVAILABLE:
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            for page in reader.pages:
+                lines_data = []
+
+                def visitor_body(text, cm, tm, font_dict, font_size):
+                    if not text or not text.strip():
+                        return
+                    clean_t = text.strip()
+                    sz = float(font_size) if font_size else 10.0
+                    font_name = ""
+                    if font_dict:
+                        font_name = str(font_dict.get("/BaseFont", "") or font_dict.get("/Name", "")).lower()
+                    is_bold = any(b_kw in font_name for b_kw in ["bold", "black", "heavy", "bd", "b+"])
+                    lines_data.append({"text": clean_t, "size": sz, "is_bold": is_bold})
+
+                page.extract_text(visitor_text=visitor_body)
+                spans.extend(lines_data)
+        except Exception:
+            pass
+
+    return spans
+
+
+def extract_formatted_spans_from_docx(docx_bytes: bytes) -> List[Dict[str, Any]]:
+    """Extract line text, font size, and bold flag from DOCX using python-docx or XML parsing."""
+    if not docx_bytes:
+        return []
+
+    spans = []
+
+    if DOCX_AVAILABLE:
+        try:
+            doc = docx.Document(io.BytesIO(docx_bytes))
+            for p in doc.paragraphs:
+                p_text = p.text.strip()
+                if not p_text:
+                    continue
+
+                max_size = 10.0
+                is_bold = False
+                style_name = str(p.style.name).lower() if p.style else ""
+
+                if "heading 1" in style_name:
+                    max_size = 18.0
+                    is_bold = True
+                elif "heading 2" in style_name or "heading 3" in style_name:
+                    max_size = 14.0
+                    is_bold = True
+                elif "heading" in style_name or "title" in style_name:
+                    max_size = 16.0
+                    is_bold = True
+
+                for r in p.runs:
+                    if r.font and r.font.size:
+                        sz_pt = float(r.font.size.pt)
+                        if sz_pt > max_size:
+                            max_size = sz_pt
+                    if r.bold:
+                        is_bold = True
+
+                spans.append({"text": p_text, "size": max_size, "is_bold": is_bold})
+            if spans:
+                return spans
+        except Exception as e:
+            print(f"[DOCX Format Parser Warning] python-docx parsing fallback: {e}")
+
+    # Fallback to XML regex parsing
     try:
-        text = content_bytes.decode("utf-8", errors="ignore")
-        return text, set()
+        with zipfile.ZipFile(io.BytesIO(docx_bytes)) as z:
+            xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
+            # Extract paragraphs <w:p>
+            p_blocks = re.findall(r"<w:p\b[^>]*>(.*?)</w:p>", xml_content, re.DOTALL)
+            for p_xml in p_blocks:
+                # Extract text
+                texts = re.findall(r"<w:t\b[^>]*>(.*?)</w:t>", p_xml, re.DOTALL)
+                p_text = "".join(texts).strip()
+                if not p_text:
+                    continue
+
+                is_bold = "<w:b/>" in p_xml or "<w:b " in p_xml
+                sz_match = re.search(r'<w:sz w:val="(\d+)"', p_xml)
+                sz = float(sz_match.group(1)) / 2.0 if sz_match else 10.0
+                if "heading" in p_xml.lower() or "title" in p_xml.lower():
+                    is_bold = True
+                    sz = max(sz, 14.0)
+
+                spans.append({"text": p_text, "size": sz, "is_bold": is_bold})
     except Exception:
-        return "", set()
+        pass
+
+    return spans
+
+
+def extract_formatting_hierarchy(spans: List[Dict[str, Any]], filename: str = "") -> List[Dict[str, Any]]:
+    """
+    Dynamically compute font-size distribution (topics = largest/bold text, subtopics = smaller text),
+    and extract structured main topics with nested subtopics lists.
+    """
+    if not spans:
+        return []
+
+    # Clean and filter spans
+    clean_spans = []
+    for s in spans:
+        t = s["text"].strip()
+        if not t or t.lower().startswith("page ") or re.match(r"^https?:", t):
+            continue
+        clean_spans.append({"text": t, "size": float(s.get("size", 10.0)), "is_bold": bool(s.get("is_bold", False))})
+
+    if not clean_spans:
+        return []
+
+    # Compute font size distribution
+    sizes = [s["size"] for s in clean_spans if s["size"] > 0]
+    min_size = min(sizes) if sizes else 10.0
+    max_size = max(sizes) if sizes else 10.0
+
+    # Determine topic font threshold
+    if max_size > min_size + 1.0:
+        # Document has distinct font size variations
+        sorted_sizes = sorted(sizes)
+        # Cutoff at 70th percentile or max_size - 2
+        p70_idx = int(len(sorted_sizes) * 0.70)
+        topic_size_cutoff = max(sorted_sizes[p70_idx], max_size - 2.0)
+    else:
+        # Uniform font size across document
+        topic_size_cutoff = max_size + 1.0  # rely primarily on bold flags
+
+    clean_fn = re.sub(r"\.[^.]+$", "", filename).replace("_", " ").replace("-", " ") if filename else "Import"
+    current_module = f"Module: {clean_fn.title()}"
+
+    tasks = []
+    current_task: Optional[Dict[str, Any]] = None
+
+    for s in clean_spans:
+        text = s["text"]
+        size = s["size"]
+        is_bold = s["is_bold"]
+
+        is_topic = False
+        # Check topic criteria: Large font size OR (Bold + font size > min_size) OR numbered header (1. Topic)
+        if size >= topic_size_cutoff:
+            is_topic = True
+        elif is_bold and size > min_size:
+            is_topic = True
+        elif re.match(r"^(?:Module|Chapter|Unit|Day|Section|Part|\d+[\.\:\)])\s*", text, re.IGNORECASE) and len(text) <= 80:
+            is_topic = True
+
+        if is_topic:
+            topic_title = re.sub(r"^(?:Module|Chapter|Unit|Day|Section|Part|\d+[\.\:\)])\s*", "", text, flags=re.IGNORECASE).strip() or text
+            prio = infer_priority(topic_title, "", is_highlighted=is_bold)
+            dur = infer_duration(topic_title, "")
+
+            current_task = {
+                "title": topic_title,
+                "category": current_module,
+                "priority": prio,
+                "duration": dur,
+                "notes": f"Extracted from {filename or 'document'}.",
+                "status": "Pending",
+                "is_highlighted": is_bold,
+                "subtopics": []
+            }
+            tasks.append(current_task)
+        else:
+            # Subtopic line under current topic
+            if current_task is None:
+                # First line was not marked as topic; create initial topic from filename or first line
+                current_task = {
+                    "title": text,
+                    "category": current_module,
+                    "priority": "Medium",
+                    "duration": "1 hr",
+                    "notes": f"Extracted from {filename or 'document'}.",
+                    "status": "Pending",
+                    "is_highlighted": False,
+                    "subtopics": []
+                }
+                tasks.append(current_task)
+            else:
+                sub_clean = re.sub(r"^(?:[\•\*\-\–\—\>\+\▪\▫\◦\⁃]|\d+[\.\:\-]\d*|[a-z0-9][\.\)])\s*", "", text).strip()
+                if sub_clean:
+                    sub_id = f"sub_{len(current_task['subtopics']) + 1}"
+                    current_task["subtopics"].append({
+                        "id": sub_id,
+                        "title": sub_clean,
+                        "completed": False
+                    })
+
+    # Ambiguous document fallback: if no subtopics were extracted at all, wrap under single topic
+    if not tasks:
+        tasks = [{
+            "title": f"Syllabus: {clean_fn.title()}",
+            "category": current_module,
+            "priority": "Medium",
+            "duration": "1 hr",
+            "notes": "Imported document content.",
+            "status": "Pending",
+            "is_highlighted": False,
+            "subtopics": []
+        }]
+
+    return tasks
+
 
 
 def infer_priority(title: str, context: str, is_highlighted: bool = False) -> str:
@@ -152,23 +392,275 @@ def infer_duration(title: str, context: str) -> str:
     return "1 hr"
 
 
-def parse_pdf_to_tasks(pdf_bytes: bytes, filename: str = "") -> List[Dict[str, Any]]:
-    """Parse Document/PDF binary content, extract main topics and subtopics, and return candidate tasks list."""
-    raw_text, highlighted_spans = extract_text_and_highlights_from_bytes(pdf_bytes, filename=filename)
-    if not raw_text:
+HF_API_URL_TEMPLATE = "https://api-inference.huggingface.co/models/{model_id}"
+DEFAULT_HF_MODEL = "mistralai/Mistral-7B-Instruct-v0.2"
+
+
+def _chunk_text(text: str, max_chars: int = 3500) -> List[str]:
+    """Split raw text into chunks of at most max_chars, breaking on line boundaries."""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    lines = text.splitlines()
+    current_chunk = []
+    current_length = 0
+
+    for line in lines:
+        if current_length + len(line) + 1 > max_chars and current_chunk:
+            chunks.append("\n".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+
+        current_chunk.append(line)
+        current_length += len(line) + 1
+
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+
+    return chunks
+
+
+def _validate_and_parse_hf_json(response_text: str) -> Optional[List[Dict[str, Any]]]:
+    """Parse and validate HF model JSON response matching {"topics": [{"title": "...", "subtopics": [...]}]}."""
+    if not response_text or not response_text.strip():
+        return None
+
+    # Search for JSON object matching {"topics": [...]}
+    json_match = re.search(r"\{\s*\"topics\"\s*:\s*\[.*\]\s*\}", response_text, re.DOTALL)
+    if not json_match:
+        # Fallback search for any outer JSON object
+        json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
+
+    if not json_match:
+        return None
+
+    try:
+        data = json.loads(json_match.group(0))
+        if isinstance(data, dict) and "topics" in data and isinstance(data["topics"], list):
+            valid_topics = []
+            for t in data["topics"]:
+                if isinstance(t, dict) and "title" in t:
+                    title = str(t["title"]).strip()
+                    subtopics = [str(st).strip() for st in t.get("subtopics", []) if str(st).strip()]
+                    if title:
+                        valid_topics.append({"title": title, "subtopics": subtopics})
+            if valid_topics:
+                return valid_topics
+    except Exception:
+        pass
+
+    return None
+
+
+def extract_subtopics_with_hf_ai(
+    raw_text: str,
+    filename: str = "",
+    hf_token: Optional[str] = None,
+    hf_model: Optional[str] = None
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Synchronous AI Extraction Pipeline:
+    1. Reads HF_API_KEY / HF_API_TOKEN and HF_MODEL_ID from environment or parameters.
+    2. Chunks raw text into ~3500 character segments to respect LLM context windows.
+    3. Sends prompt asking for strictly formatted JSON object:
+       {"topics": [{"title": "string", "subtopics": ["string"]}]}
+    4. Parses and validates JSON response. Retries ONCE with a strict prompt if JSON is invalid.
+    5. Merges and deduplicates topics/subtopics across chunks.
+    6. Returns structured Task models populated with main topics and nested AI subtopics.
+    """
+    import os
+
+    token = (hf_token or os.environ.get("HF_API_KEY") or os.environ.get("HF_API_TOKEN", "")).strip()
+    model = (hf_model or os.environ.get("HF_MODEL_ID", DEFAULT_HF_MODEL)).strip()
+
+    if not token:
+        return None
+
+    api_url = HF_API_URL_TEMPLATE.format(model_id=model)
+    chunks = _chunk_text(raw_text, max_chars=3500)
+    merged_topics_dict: Dict[str, Set[str]] = {}  # topic_title_lower -> set of subtopics
+    topic_display_titles: Dict[str, str] = {}     # topic_title_lower -> original title
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    for chunk in chunks:
+        base_prompt = (
+            "Extract main topics and subtopics from the text below.\n"
+            "Return ONLY a valid JSON object matching this exact shape:\n"
+            "{\n"
+            '  "topics": [\n'
+            '    {\n'
+            '      "title": "Main Topic Name",\n'
+            '      "subtopics": ["Subtopic 1", "Subtopic 2"]\n'
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "Do NOT include markdown formatting, backticks, or intro commentary.\n\n"
+            f"Document Text:\n{chunk}"
+        )
+
+        prompt = f"[INST] {base_prompt} [/INST]" if "mistral" in model.lower() or "llama" in model.lower() else base_prompt
+
+        topics_from_chunk = None
+
+        for attempt in range(2):
+            if attempt == 1:
+                # Retry prompt with stricter instruction
+                strict_prompt = (
+                    "STRICT INSTRUCTION: Your previous output was invalid.\n"
+                    "Return ONLY a valid raw JSON object matching exact format:\n"
+                    '{"topics": [{"title": "string", "subtopics": ["string"]}]}\n'
+                    f"Document Text:\n{chunk[:2000]}"
+                )
+                prompt = f"[INST] {strict_prompt} [/INST]" if "mistral" in model.lower() else strict_prompt
+
+            payload = json.dumps({
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 1000,
+                    "temperature": 0.1,
+                    "return_full_text": False
+                }
+            }).encode("utf-8")
+
+            try:
+                req = urllib.request.Request(api_url, headers=headers, data=payload)
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    raw_res = resp.read().decode("utf-8")
+                    resp_data = json.loads(raw_res)
+
+                    generated_text = ""
+                    if isinstance(resp_data, list) and len(resp_data) > 0:
+                        generated_text = resp_data[0].get("generated_text", "")
+                    elif isinstance(resp_data, dict):
+                        generated_text = resp_data.get("generated_text", "")
+
+                    topics_from_chunk = _validate_and_parse_hf_json(generated_text)
+                    if topics_from_chunk:
+                        break  # Successful extraction
+            except urllib.error.HTTPError as http_err:
+                if http_err.code == 401:
+                    raise RuntimeError("Hugging Face API Authentication Error: Invalid API Key")
+                elif http_err.code == 429:
+                    raise RuntimeError("Hugging Face API Rate Limit Exceeded. Please try again later.")
+                elif http_err.code == 503:
+                    raise RuntimeError("Hugging Face AI Model is loading or busy. Please retry in a few seconds.")
+                else:
+                    print(f"[HF AI Extractor] HTTP Error {http_err.code}: {http_err.reason}")
+            except Exception as e:
+                print(f"[HF AI Extractor Attempt {attempt + 1} failed]: {e}")
+
+        # Merge extracted topics & subtopics from this chunk
+        if topics_from_chunk:
+            for top in topics_from_chunk:
+                t_title = top["title"]
+                t_lower = t_title.lower()
+                if t_lower not in merged_topics_dict:
+                    merged_topics_dict[t_lower] = set()
+                    topic_display_titles[t_lower] = t_title
+
+                for sub in top.get("subtopics", []):
+                    if sub.strip():
+                        merged_topics_dict[t_lower].add(sub.strip())
+
+    if not merged_topics_dict:
+        return None
+
+    # Construct final task list with deduplicated topics and subtopics
+    clean_fn = re.sub(r"\.[^.]+$", "", filename).replace("_", " ").replace("-", " ") if filename else "Import"
+    category_name = f"Module: {clean_fn.title()}"
+    tasks = []
+
+    for idx, (t_lower, sub_set) in enumerate(merged_topics_dict.items()):
+        main_title = topic_display_titles[t_lower]
+        subtopics_list = [
+            {"id": f"sub_{s_idx + 1}", "title": sub_title, "completed": False}
+            for s_idx, sub_title in enumerate(sorted(list(sub_set)))
+        ]
+
+        tasks.append({
+            "title": main_title,
+            "category": category_name,
+            "priority": infer_priority(main_title, ""),
+            "duration": infer_duration(main_title, ""),
+            "notes": f"AI Extracted via Hugging Face ({model})",
+            "status": "Pending",
+            "is_highlighted": False,
+            "subtopics": subtopics_list
+        })
+
+    return tasks
+
+
+
+def parse_pdf_to_tasks(
+    pdf_bytes: bytes,
+    filename: str = "",
+    hf_token: Optional[str] = None,
+    hf_model: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Parse Document/PDF content synchronously using font-size & bold formatting hierarchy extraction.
+    Dynamically computes topic vs subtopic clusters based on text size/weight distribution.
+    """
+    if not pdf_bytes:
         fallback_title = f"Review Syllabus: {filename}" if filename else "Review Uploaded Document"
         return [{
             "title": fallback_title,
             "category": "Module Import",
             "priority": "Medium",
             "duration": "1 hr",
-            "notes": "Document imported. Please add detailed sub-topics.",
+            "notes": "Document imported. Subtopics automatically generated.",
             "status": "Pending",
             "is_highlighted": False,
             "subtopics": []
         }]
 
-    raw_lines = [l for l in raw_text.splitlines() if l.strip()]
+    # Optional HF AI extraction (default OFF unless ENABLE_HF_AI=true or token explicitly passed)
+    import os
+    if os.environ.get("ENABLE_HF_AI", "").lower() in ("true", "1") and (hf_token or os.environ.get("HF_API_KEY")):
+        raw_text, _ = extract_text_and_highlights_from_bytes(pdf_bytes, filename=filename)
+        ai_tasks = extract_subtopics_with_hf_ai(raw_text, filename=filename, hf_token=hf_token, hf_model=hf_model)
+        if ai_tasks:
+            return ai_tasks
+
+    # Primary Synchronous Extraction Pipeline: Formatting-based (PyMuPDF fitz / python-docx / PyPDF / XML)
+    fn_lower = filename.lower()
+    if fn_lower.endswith(".docx"):
+        spans = extract_formatted_spans_from_docx(pdf_bytes)
+    elif fn_lower.endswith(".pdf") or pdf_bytes.startswith(b"%PDF"):
+        spans = extract_formatted_spans_from_pdf(pdf_bytes)
+    else:
+        # Text file / general bytes
+        try:
+            raw_text = pdf_bytes.decode("utf-8", errors="ignore")
+            lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+            spans = [{"text": l, "size": 10.0, "is_bold": False} for l in lines]
+        except Exception:
+            spans = []
+
+    tasks = extract_formatting_hierarchy(spans, filename=filename)
+    if tasks:
+        return tasks
+
+    # Fallback if no spans found
+    clean_fn = re.sub(r"\.[^.]+$", "", filename).replace("_", " ").replace("-", " ") if filename else "Import"
+    return [{
+        "title": f"Study Syllabus: {clean_fn.title()}",
+        "category": f"Module: {clean_fn.title()}",
+        "priority": "Medium",
+        "duration": "1 hr",
+        "notes": "Imported document content.",
+        "status": "Pending",
+        "is_highlighted": False,
+        "subtopics": []
+    }]
+
 
     tasks: List[Dict[str, Any]] = []
     current_module = "Module Import"

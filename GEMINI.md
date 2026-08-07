@@ -92,6 +92,7 @@ The application follows a clean 3-Tier Layered Architecture with dual Frontend s
 ## Rules
 1. Don't take screenshots
 2. Commit every change to git and push with appropriate commit messages only when i say so ask me every time in chat when to push if i forget pusht it at 9pm everyday.
+3. Dont add Todo.md and Gemini.md in the git put it in gitignore file
 
 ## Site URL link(Update it here)
 - http://localhost:8000

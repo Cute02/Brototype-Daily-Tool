@@ -1,52 +1,121 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import Header from './components/Header';
+import confetti from 'canvas-confetti';
+import { getApiUrl } from './config/api';
+import Navbar from './components/Navbar';
 import StatsDashboard from './components/StatsDashboard';
-import TaskForm from './components/TaskForm';
-import TaskCard from './components/TaskCard';
 import PomodoroTimer from './components/PomodoroTimer';
 import CircularProgress from './components/CircularProgress';
-import DocumentImportModal from './components/DocumentImportModal';
+import TaskCard from './components/TaskCard';
+import TaskModal from './components/TaskModal';
 import MentorEmailModal from './components/MentorEmailModal';
+import DocumentImportModal from './components/DocumentImportModal';
 import AuthModal from './components/AuthModal';
-import { triggerConfettiBurst } from './utils/confetti';
+
+const IS_GITHUB_PAGES = window.location.hostname.endsWith('github.io') || window.location.protocol === 'file:' || !import.meta.env.VITE_API_BASE_URL;
+
+function getStoredTasksFromLS() {
+  try {
+    const raw = localStorage.getItem('brototype_react_tasks');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  
+  const defaults = [
+    {
+      id: 1,
+      title: "Core Python Programming & Data Structures",
+      category: "Module: Python Basics",
+      priority: "High",
+      duration: "2 hrs",
+      notes: "Auto-generated syllabus checklist for Brototype daily tracking.",
+      status: "In Progress",
+      is_highlighted: true,
+      subtopics: [
+        { id: "sub_1", title: "Variables and Dynamic Typing", completed: true },
+        { id: "sub_2", title: "Control Flow & Loop Constructs", completed: true },
+        { id: "sub_3", title: "Lists, Dictionaries and Set Comprehensions", completed: false }
+      ]
+    },
+    {
+      id: 2,
+      title: "REST API & HTTP Protocol Fundamentals",
+      category: "Module: Backend Architecture",
+      priority: "Medium",
+      duration: "1 hr",
+      notes: "Understanding status codes, headers, and request methods.",
+      status: "Pending",
+      is_highlighted: false,
+      subtopics: [
+        { id: "sub_1", title: "HTTP Request Methods (GET, POST, PUT, DELETE)", completed: false },
+        { id: "sub_2", title: "JSON Payload Serialization", completed: false }
+      ]
+    }
+  ];
+  localStorage.setItem('brototype_react_tasks', JSON.stringify(defaults));
+  return defaults;
+}
+
+function setStoredTasksToLS(tasks) {
+  try {
+    localStorage.setItem('brototype_react_tasks', JSON.stringify(tasks));
+  } catch (e) {}
+}
+
+function calcStats(tasks) {
+  const total = tasks.length;
+  const completed = tasks.filter(t => t.status === 'Completed').length;
+  const inProgress = tasks.filter(t => t.status === 'In Progress').length;
+  const pending = tasks.filter(t => t.status === 'Pending').length;
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, inProgress, pending, completionPercentage: percent };
+}
 
 export default function App() {
+  // Theme State
+  const [theme, setTheme] = useState(localStorage.getItem('brototype_theme') || 'ember');
+
+  // Task & Stats State
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState({});
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+
+  // Filter, Sort & Search State
   const [filter, setFilter] = useState('ALL');
-  const [theme, setTheme] = useState(localStorage.getItem('theme_preference') || 'ember');
-
-  const handleThemeChange = (newTheme) => {
-    setTheme(newTheme);
-    localStorage.setItem('theme_preference', newTheme);
-    document.body.setAttribute('data-theme', newTheme);
-  };
-
-  useEffect(() => {
-    document.body.setAttribute('data-theme', theme);
-  }, [theme]);
+  const [sortBy, setSortBy] = useState('priority');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || null);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  // Modals state
+  // Modals State
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [isMentorEmailOpen, setIsMentorEmailOpen] = useState(false);
+  const [isPdfOpen, setIsPdfOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState('login');
-  const [isPdfOpen, setIsPdfOpen] = useState(false);
-  const [isEmailOpen, setIsEmailOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
 
-  // Toast notifications state
+  // User & Auth State
+  const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [mentorEmail, setMentorEmail] = useState(localStorage.getItem('mentor_email') || 'mentor@brototype.com');
+
+  // Toast Notifications State
   const [toasts, setToasts] = useState([]);
 
   const showToast = useCallback((message, type = 'info') => {
-    const id = Date.now();
+    const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3500);
   }, []);
+
+  const triggerConfettiBurst = (x, y) => {
+    const originX = x ? x / window.innerWidth : 0.5;
+    const originY = y ? y / window.innerHeight : 0.5;
+    confetti({
+      particleCount: 50,
+      spread: 60,
+      origin: { x: originX, y: originY },
+    });
+  };
 
   const getAuthHeaders = useCallback(() => {
     const headers = { 'Content-Type': 'application/json' };
@@ -59,6 +128,9 @@ export default function App() {
 
   const fetchTasks = useCallback(async () => {
     try {
+      if (IS_GITHUB_PAGES) {
+        throw new Error('Client-side mode');
+      }
       let url = `/api/tasks?sort_by=${sortBy}`;
       if (filter !== 'ALL') {
         url += `&status=${encodeURIComponent(filter)}`;
@@ -67,22 +139,31 @@ export default function App() {
         url += `&search=${encodeURIComponent(searchQuery)}`;
       }
 
-      const res = await fetch(url, { headers: getAuthHeaders() });
+      const res = await fetch(getApiUrl(url), { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to load tasks');
       const data = await res.json();
       setTasks(data.tasks || []);
       setStats(data.stats || {});
     } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
+      let lsTasks = getStoredTasksFromLS();
+      if (filter !== 'ALL') {
+        lsTasks = lsTasks.filter(t => t.status === filter);
+      }
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        lsTasks = lsTasks.filter(t => t.title.toLowerCase().includes(q) || (t.category && t.category.toLowerCase().includes(q)));
+      }
+      setTasks(lsTasks);
+      setStats(calcStats(getStoredTasksFromLS()));
     }
-  }, [filter, sortBy, searchQuery, getAuthHeaders, showToast]);
+  }, [filter, sortBy, searchQuery, getAuthHeaders]);
 
   const checkAuthStatus = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    if (!token || IS_GITHUB_PAGES) return;
 
     try {
-      const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(getApiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('Session expired');
       const data = await res.json();
       if (data.authenticated) {
@@ -107,7 +188,8 @@ export default function App() {
   // Task Actions
   const handleAddTask = async (taskData) => {
     try {
-      const res = await fetch('/api/tasks', {
+      if (IS_GITHUB_PAGES) throw new Error('Client-side mode');
+      const res = await fetch(getApiUrl('/api/tasks'), {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(taskData),
@@ -116,23 +198,31 @@ export default function App() {
       showToast('✓ Task created successfully!', 'success');
       await fetchTasks();
     } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
+      const all = getStoredTasksFromLS();
+      const newId = all.length > 0 ? Math.max(...all.map(t => t.id)) + 1 : 1;
+      const newTask = { id: newId, status: 'Pending', subtopics: [], ...taskData };
+      all.push(newTask);
+      setStoredTasksToLS(all);
+      showToast('✓ Task created successfully!', 'success');
+      await fetchTasks();
     }
   };
 
-  const handleUpdateStatus = async (id, status, event) => {
+  const handleUpdateStatus = async (id, status, event, cascadeAllSubtopics = false) => {
     try {
+      const targetTask = tasks.find((t) => t.id === id);
+      let updatedSubtopics = targetTask ? targetTask.subtopics || [] : [];
+
+      if (cascadeAllSubtopics || status === 'Completed' || status === 'Pending') {
+        const checkState = (status === 'Completed');
+        updatedSubtopics = updatedSubtopics.map((s) => ({ ...s, completed: checkState }));
+      }
+
       if (status === 'Completed' && event) {
         triggerConfettiBurst(event.clientX, event.clientY);
       }
-      const res = await fetch(`/api/tasks/${id}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error('Failed to update status');
-      showToast(`✓ Status updated to ${status}`, 'success');
-      await fetchTasks();
+
+      await handleUpdateFullDetails(id, { status, subtopics: updatedSubtopics });
     } catch (err) {
       showToast(`Error: ${err.message}`, 'error');
     }
@@ -140,7 +230,8 @@ export default function App() {
 
   const handleUpdateFullDetails = async (id, details) => {
     try {
-      const res = await fetch(`/api/tasks/${id}`, {
+      if (IS_GITHUB_PAGES) throw new Error('Client-side mode');
+      const res = await fetch(getApiUrl(`/api/tasks/${id}`), {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(details),
@@ -149,15 +240,23 @@ export default function App() {
       showToast('✓ Task updated successfully!', 'success');
       await fetchTasks();
     } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
+      const all = getStoredTasksFromLS();
+      const idx = all.findIndex(x => x.id === id);
+      if (idx !== -1) {
+        all[idx] = { ...all[idx], ...details };
+        setStoredTasksToLS(all);
+        showToast('✓ Task updated successfully!', 'success');
+        await fetchTasks();
+      }
     }
   };
+
 
   const handleToggleSubtopic = async (taskId, subIdx, isChecked, event) => {
     const targetTask = tasks.find((t) => t.id === taskId);
     if (!targetTask) return;
 
-    const updatedSubtopics = targetTask.subtopics.map((s, i) => {
+    const updatedSubtopics = (targetTask.subtopics || []).map((s, i) => {
       if (i === subIdx) {
         return { ...s, completed: isChecked };
       }
@@ -166,15 +265,13 @@ export default function App() {
 
     const total = updatedSubtopics.length;
     const numDone = updatedSubtopics.filter((s) => s.completed).length;
-    let newStatus = targetTask.status;
+    let newStatus = 'Pending';
 
-    if (numDone === total) {
+    if (numDone === total && total > 0) {
       newStatus = 'Completed';
       if (event) triggerConfettiBurst(event.clientX, event.clientY);
     } else if (numDone > 0) {
       newStatus = 'In Progress';
-    } else {
-      newStatus = 'Pending';
     }
 
     await handleUpdateFullDetails(taskId, { subtopics: updatedSubtopics, status: newStatus });
@@ -217,8 +314,6 @@ export default function App() {
     showToast('Subtopic removed', 'info');
   };
 
-  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
-
   const handleToggleSelectTask = (taskId) => {
     setSelectedTaskIds((prev) =>
       prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
@@ -236,7 +331,7 @@ export default function App() {
   const handleBulkDelete = async () => {
     if (selectedTaskIds.length === 0) return;
     try {
-      const res = await fetch('/api/tasks/bulk-delete', {
+      const res = await fetch(getApiUrl('/api/tasks/bulk-delete'), {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ ids: selectedTaskIds }),
@@ -254,7 +349,7 @@ export default function App() {
 
   const handleDeleteTask = async (id) => {
     try {
-      const res = await fetch(`/api/tasks/${id}`, {
+      const res = await fetch(getApiUrl(`/api/tasks/${id}`), {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -268,7 +363,7 @@ export default function App() {
 
   const handleBatchImport = async (batchTasks) => {
     try {
-      const res = await fetch('/api/tasks/batch', {
+      const res = await fetch(getApiUrl('/api/tasks/batch'), {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ tasks: batchTasks }),
@@ -289,7 +384,7 @@ export default function App() {
   // Auth Handlers
   const handleLogin = async (identifier, password) => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, password }),
@@ -310,7 +405,7 @@ export default function App() {
 
   const handleRegister = async (username, password, email) => {
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch(getApiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, email }),
@@ -335,7 +430,7 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch('/api/auth/request-otp', {
+      const res = await fetch(getApiUrl('/api/auth/request-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier }),
@@ -351,7 +446,7 @@ export default function App() {
 
   const handleVerifyOtp = async (identifier, otp) => {
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const res = await fetch(getApiUrl('/api/auth/verify-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, otp }),
@@ -370,10 +465,74 @@ export default function App() {
     }
   };
 
+  const handleRequestReset = async (identifier) => {
+    try {
+      const res = await fetch(getApiUrl('/api/auth/forgot-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to request reset');
+
+      showToast(`📩 Reset link & OTP generated for ${data.username}`, 'success');
+      return data;
+    } catch (err) {
+      showToast(`Reset Error: ${err.message}`, 'error');
+      return null;
+    }
+  };
+
+  const handleResetPassword = async (identifier, codeOrToken, newPassword, confirmPassword) => {
+    if (newPassword !== confirmPassword) {
+      showToast('New passwords do not match', 'error');
+      return false;
+    }
+    try {
+      const isOtp = /^\d{6}$/.test(codeOrToken.trim());
+      const payload = {
+        identifier: identifier,
+        new_password: newPassword,
+        ...(isOtp ? { otp: codeOrToken.trim() } : { token: codeOrToken.trim() })
+      };
+
+      const res = await fetch(getApiUrl('/api/auth/reset-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Password reset failed');
+
+      showToast(`🔒 ${data.message}`, 'success');
+
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      return true;
+    } catch (err) {
+      showToast(`Reset Failed: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const action = urlParams.get('action');
+      const token = urlParams.get('token');
+      if (action === 'reset-password' && token) {
+        setAuthTab('forgot');
+        setIsAuthOpen(true);
+        showToast('🔑 Reset token detected from URL verification link!', 'info');
+      }
+    } catch (e) {}
+  }, [showToast]);
+
   const handleLogout = async () => {
     if (authToken) {
       try {
-        await fetch('/api/auth/logout', { method: 'POST', headers: getAuthHeaders() });
+        await fetch(getApiUrl('/api/auth/logout'), { method: 'POST', headers: getAuthHeaders() });
       } catch (e) {}
     }
     setAuthToken(null);
@@ -382,6 +541,8 @@ export default function App() {
     showToast('Logged out successfully', 'info');
     await fetchTasks();
   };
+
+
 
   return (
     <div className="app-container">
@@ -592,6 +753,8 @@ export default function App() {
         onRegister={handleRegister}
         onRequestOtp={handleRequestOtp}
         onVerifyOtp={handleVerifyOtp}
+        onRequestReset={handleRequestReset}
+        onResetPassword={handleResetPassword}
       />
 
       {/* Toasts */}

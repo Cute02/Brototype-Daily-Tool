@@ -122,3 +122,20 @@ def test_api_filter_and_search():
         data = json.loads(resp.read().decode("utf-8"))
         for t in data["tasks"]:
             assert t["status"] == "Completed"
+
+
+def test_api_sensitive_files_protected():
+    """Verify that requests targeting sensitive files return 403 Forbidden."""
+    sensitive_paths = [
+        "http://localhost:8000/.env",
+        "http://localhost:8000/.git/config",
+        "http://localhost:8000/users.json",
+        "http://localhost:8000/daily_tasks.json",
+        "http://localhost:8000/server.py"
+    ]
+    for path in sensitive_paths:
+        req = urllib.request.Request(path)
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req)
+        assert exc_info.value.code == 403
+

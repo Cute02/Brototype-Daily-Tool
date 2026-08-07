@@ -1,5 +1,14 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import SubtopicsChecklist from './SubtopicsChecklist';
+
+export function deriveTopicState(subtopics) {
+  if (!subtopics || subtopics.length === 0) return 'unchecked';
+  const total = subtopics.length;
+  const completedCount = subtopics.filter((s) => Boolean(s.completed)).length;
+  if (completedCount === total) return 'checked';
+  if (completedCount > 0) return 'indeterminate';
+  return 'unchecked';
+}
 
 export default function TaskCard({
   task,
@@ -7,15 +16,29 @@ export default function TaskCard({
   onToggleSelect,
   onUpdateStatus,
   onToggleSubtopic,
-  onAddSubtopic,
   onDeleteSubtopic,
   onOpenEditModal,
   onDelete,
 }) {
-  const isCompleted = task.status === 'Completed';
-  const prioClass = task.priority ? task.priority.toLowerCase() : 'medium';
   const subtopics = task.subtopics || [];
+  const derivedState = deriveTopicState(subtopics);
+  const isCompleted = subtopics.length > 0 ? derivedState === 'checked' : task.status === 'Completed';
+  const prioClass = task.priority ? task.priority.toLowerCase() : 'medium';
   const completedSubtopics = subtopics.filter((s) => s.completed).length;
+
+  const topicCheckboxRef = useRef(null);
+
+  useEffect(() => {
+    if (topicCheckboxRef.current && subtopics.length > 0) {
+      topicCheckboxRef.current.indeterminate = (derivedState === 'indeterminate');
+    }
+  }, [derivedState, subtopics.length]);
+
+  const handleTopicCheckboxChange = (e) => {
+    const isChecked = e.target.checked;
+    const nextStatus = isChecked ? 'Completed' : 'Pending';
+    onUpdateStatus(task.id, nextStatus, e, true); // pass cascadeAllSubtopics flag
+  };
 
   return (
     <div className={`task-item ${isCompleted ? 'completed' : ''} ${isSelected ? 'selected-task-card' : ''}`}>
@@ -28,11 +51,15 @@ export default function TaskCard({
         style={{ marginTop: '5px', accentColor: '#f97316', cursor: 'pointer', width: '16px', height: '16px' }}
       />
 
-      <div
-        className="task-checkbox"
-        onClick={(e) => onUpdateStatus(task.id, isCompleted ? 'Pending' : 'Completed', e)}
-      >
-        {isCompleted ? '✓' : ''}
+      {/* Main Topic Checkbox with Native Indeterminate DOM Support */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px' }}>
+        <input
+          type="checkbox"
+          ref={topicCheckboxRef}
+          checked={isCompleted}
+          onChange={handleTopicCheckboxChange}
+          style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#6366f1' }}
+        />
       </div>
 
       <div className="task-body">
@@ -52,7 +79,6 @@ export default function TaskCard({
           taskId={task.id}
           subtopics={task.subtopics || []}
           onToggleSubtopic={onToggleSubtopic}
-          onAddSubtopic={onAddSubtopic}
           onDeleteSubtopic={onDeleteSubtopic}
         />
       </div>
@@ -74,3 +100,4 @@ export default function TaskCard({
     </div>
   );
 }
+
