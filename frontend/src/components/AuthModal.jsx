@@ -40,7 +40,9 @@ export default function AuthModal({
     } else if (tab === 'register') {
       onRegister(username, password, email);
     } else if (tab === 'forgot') {
-      if (onResetPassword) {
+      if (forgotStep === 1) {
+        handleRequestResetLink();
+      } else if (onResetPassword) {
         const success = await onResetPassword(forgotIdentifier, forgotCode, newPassword, confirmPassword);
         if (success) {
           setUsername(forgotIdentifier);

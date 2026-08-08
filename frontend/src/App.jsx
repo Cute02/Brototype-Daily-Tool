@@ -466,11 +466,15 @@ export default function App() {
   };
 
   const handleRequestReset = async (identifier) => {
+    if (!identifier || !identifier.trim()) {
+      showToast('Please enter your Username or Email Address', 'error');
+      return null;
+    }
     try {
       const res = await fetch(getApiUrl('/api/auth/forgot-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier }),
+        body: JSON.stringify({ identifier: identifier.trim() }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to request reset');

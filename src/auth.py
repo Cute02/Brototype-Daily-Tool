@@ -59,6 +59,8 @@ class AuthManager:
         if identifier in self.users:
             return identifier
         for uname, udata in self.users.items():
+            if uname.lower() == identifier:
+                return uname
             if udata.get("email") and udata.get("email").strip().lower() == identifier:
                 return uname
         return None
