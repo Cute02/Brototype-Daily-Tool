@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
-export default function MentorEmailModal({ isOpen, onClose, tasks, stats, currentUser, showToast }) {
+export default function MentorEmailModal({ isOpen, onClose, tasks, stats, currentUser, showToast, onClearQueue }) {
   const [mentorEmail, setMentorEmail] = useState(localStorage.getItem('mentor_email') || 'mentor@brototype.com');
   const [subject, setSubject] = useState('');
   const [reportText, setReportText] = useState('');
+  const [autoDeleteOnSend, setAutoDeleteOnSend] = useState(localStorage.getItem('auto_delete_on_send') !== 'false');
 
   useEffect(() => {
     if (isOpen) {
@@ -62,11 +63,20 @@ export default function MentorEmailModal({ isOpen, onClose, tasks, stats, curren
 
   if (!isOpen) return null;
 
+  const handleQueueCleanup = () => {
+    if (autoDeleteOnSend && tasks.length > 0 && onClearQueue) {
+      const idsToDelete = tasks.map((t) => t.id);
+      onClearQueue(idsToDelete);
+    }
+  };
+
   const sendGmail = () => {
     localStorage.setItem('mentor_email', mentorEmail);
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(mentorEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(reportText)}`;
     window.open(gmailUrl, '_blank');
     showToast('Opening Gmail web compose...', 'info');
+    handleQueueCleanup();
+    onClose();
   };
 
   const sendMailto = () => {
@@ -74,6 +84,8 @@ export default function MentorEmailModal({ isOpen, onClose, tasks, stats, curren
     const mailtoUrl = `mailto:${encodeURIComponent(mentorEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(reportText)}`;
     window.open(mailtoUrl, '_blank');
     showToast('Opening system mail app...', 'info');
+    handleQueueCleanup();
+    onClose();
   };
 
   const copyToClipboard = () => {
@@ -119,6 +131,21 @@ export default function MentorEmailModal({ isOpen, onClose, tasks, stats, curren
               style={{ fontFamily: 'monospace', fontSize: '12px' }}
             ></textarea>
           </div>
+
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', background: 'rgba(255,255,255,0.05)', padding: '10px 14px', borderRadius: '6px' }}>
+            <input
+              type="checkbox"
+              id="auto-delete-checkbox"
+              checked={autoDeleteOnSend}
+              onChange={(e) => {
+                setAutoDeleteOnSend(e.target.checked);
+                localStorage.setItem('auto_delete_on_send', e.target.checked);
+              }}
+            />
+            <label htmlFor="auto-delete-checkbox" style={{ margin: 0, cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-color, #e0e0e0)' }}>
+              ⏰ Auto-delete reported tasks from queue after email is sent
+            </label>
+          </div>
         </div>
 
         <div className="modal-footer">
@@ -126,10 +153,10 @@ export default function MentorEmailModal({ isOpen, onClose, tasks, stats, curren
             📋 Copy Text
           </button>
           <button className="btn btn-primary" onClick={sendGmail}>
-            📩 Send via Gmail
+            📩 Send via Gmail & Clear Queue
           </button>
           <button className="btn btn-success" onClick={sendMailto}>
-            ✉️ Open Mail App
+            ✉️ Open Mail App & Clear Queue
           </button>
         </div>
       </div>

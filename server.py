@@ -119,6 +119,13 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(response)
             return
 
+        if path == "/api/tasks/calendar":
+            mgr = self._get_task_manager()
+            mgr.refresh()
+            calendar_data = mgr.get_calendar_data()
+            self._send_json({"calendar": calendar_data})
+            return
+
         # Security check: Block public HTTP access to sensitive files, dotfiles, data stores, and source code
         clean_path = path.lstrip("/")
         filename = Path(clean_path).name.lower()
@@ -278,6 +285,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 priority = data.get("priority", "Medium")
                 status = data.get("status", "Pending")
                 duration = data.get("duration", "1 hr")
+                scheduled_date = data.get("scheduled_date", "")
                 scheduled_time = data.get("scheduled_time", "")
                 notes = data.get("notes", "")
 
@@ -289,6 +297,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     priority=priority,
                     status=status,
                     duration=duration,
+                    scheduled_date=scheduled_date,
                     scheduled_time=scheduled_time,
                     notes=notes
                 )
@@ -382,6 +391,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     priority=data.get("priority"),
                     status=data.get("status"),
                     duration=data.get("duration"),
+                    scheduled_date=data.get("scheduled_date"),
                     scheduled_time=data.get("scheduled_time"),
                     notes=data.get("notes"),
                     subtopics=data.get("subtopics")

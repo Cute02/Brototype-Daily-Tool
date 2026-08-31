@@ -36,6 +36,15 @@
         <button id="logout-btn" class="btn btn-secondary" style="display: none;">
           <span class="btn-icon">🚪</span> Logout
         </button>
+        <!-- Auto-Schedule Controls -->
+        <div class="auto-schedule-wrapper" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; background: rgba(255,255,255,0.06); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; margin: 0; font-weight: 500;">
+            <input type="checkbox" id="auto-schedule-toggle" checked title="Enable daily auto-scheduled task report & queue clearing">
+            <span>⏰ Auto-Schedule:</span>
+          </label>
+          <input type="time" id="auto-schedule-time-input" value="21:00" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.2); color: inherit; border-radius: 4px; padding: 2px 6px; font-size: 0.85rem;" title="Scheduled daily report dispatch & queue clearing time">
+        </div>
+
         <button id="import-pdf-btn" class="btn btn-secondary">
           <span class="btn-icon">📄</span> Import PDF Syllabus
         </button>
@@ -47,6 +56,37 @@
         </button>
       </div>
     </header>
+
+    <!-- Cyber Live Day Progress & Countdown HUD Widget -->
+    <div class="cyber-date-hud" id="cyber-date-hud">
+      <div class="hud-content">
+        <div class="hud-pill date-pill" title="Current Day & Calendar Date">
+          <span class="hud-icon">📅</span>
+          <div class="date-info">
+            <span class="day-name" id="hud-day-name">Friday</span>
+            <span class="date-details" id="hud-date-details">28<sup>th</sup> August 2026</span>
+          </div>
+        </div>
+
+        <div class="hud-pill shift-pill" id="hud-shift-pill">
+          <span class="shift-text" id="hud-shift-text">⚡ Night Owl Focus Mode</span>
+        </div>
+
+        <div class="hud-pill clock-pill" title="Live System Time">
+          <span class="hud-icon live-pulse">⏱️</span>
+          <span class="live-clock-text" id="hud-clock-text">10:30:00 PM</span>
+        </div>
+
+        <div class="hud-pill countdown-pill" id="hud-countdown-pill" title="Target Mentor Daily Status Submission Cutoff">
+          <span id="hud-countdown-text">⏳ Calculating Mentor Report Deadline...</span>
+        </div>
+      </div>
+
+      <div class="hud-progress-container" id="hud-progress-container" title="Day Progress">
+        <div class="hud-progress-bar" id="hud-progress-bar" style="width: 0%;"></div>
+        <span class="hud-progress-label" id="hud-progress-label">0% Completed</span>
+      </div>
+    </div>
 
     <!-- Productivity Summary Dashboard -->
     <section class="stats-dashboard">
@@ -217,6 +257,17 @@
               </div>
             </div>
 
+            <div class="form-row">
+              <div class="form-group">
+                <label for="task-scheduled-date">📅 Scheduled Date</label>
+                <input type="date" id="task-scheduled-date">
+              </div>
+              <div class="form-group">
+                <label for="task-scheduled-time">⏰ Scheduled Time</label>
+                <input type="time" id="task-scheduled-time">
+              </div>
+            </div>
+
             <div class="form-group">
               <label for="task-category">Category</label>
               <input type="text" id="task-category" placeholder="e.g., Data Structures, Web Dev, Review" value="General">
@@ -236,6 +287,24 @@
               </button>
             </div>
           </form>
+        </div>
+
+        <!-- 📅 Task Calendar Widget -->
+        <div class="card task-calendar" id="task-calendar-widget">
+          <div class="calendar-header">
+            <button class="calendar-nav-btn" id="cal-prev-btn" title="Previous Month">◀</button>
+            <div class="calendar-title">
+              <span class="calendar-month" id="cal-month-label"></span>
+              <span class="calendar-year" id="cal-year-label"></span>
+            </div>
+            <button class="calendar-nav-btn" id="cal-next-btn" title="Next Month">▶</button>
+          </div>
+          <button class="calendar-today-btn" id="cal-today-btn">📅 Today</button>
+          <div class="calendar-grid" id="cal-grid"></div>
+          <div class="calendar-selected-info" id="cal-selected-info" style="display: none;">
+            <span id="cal-selected-label"></span>
+            <button class="btn btn-sm btn-secondary" id="cal-clear-btn">✕ Clear</button>
+          </div>
         </div>
       </aside>
 
@@ -293,16 +362,23 @@
           <label>Formatted Report Body:</label>
           <textarea id="email-body-preview" rows="12" readonly></textarea>
         </div>
+
+        <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 12px; background: rgba(255,255,255,0.05); padding: 10px 14px; border-radius: 6px;">
+          <input type="checkbox" id="auto-delete-tasks-checkbox" checked>
+          <label for="auto-delete-tasks-checkbox" style="margin: 0; cursor: pointer; font-size: 0.9rem;">
+            ⏰ Auto-delete reported tasks from queue after email is sent
+          </label>
+        </div>
       </div>
       <div class="modal-footer">
         <button id="copy-report-btn" class="btn btn-secondary">
           <span class="btn-icon">📋</span> Copy Report
         </button>
         <button id="open-mailto-btn" class="btn btn-secondary">
-          <span class="btn-icon">💻</span> System Mail App
+          <span class="btn-icon">💻</span> Open Mail App & Clear Queue
         </button>
         <button id="open-gmail-btn" class="btn btn-primary btn-glow" style="background: #ea4335;">
-          <span class="btn-icon">✉️</span> Send via Gmail
+          <span class="btn-icon">✉️</span> Send via Gmail & Clear Queue
         </button>
       </div>
     </div>

@@ -31,6 +31,7 @@ class TaskManager:
         notes: str = "",
         status: str = TaskStatus.PENDING.value,
         duration: str = "1 hr",
+        scheduled_date: str = "",
         scheduled_time: str = "",
         subtopics: Optional[List[Dict[str, Any]]] = None,
     ) -> Task:
@@ -47,6 +48,7 @@ class TaskManager:
             status=status,
             priority=priority,
             duration=duration.strip() if duration else "1 hr",
+            scheduled_date=scheduled_date.strip() if scheduled_date else "",
             scheduled_time=scheduled_time.strip() if scheduled_time else "",
             created_at=now,
             updated_at=now,
@@ -146,6 +148,7 @@ class TaskManager:
         priority: Optional[str] = None,
         status: Optional[str] = None,
         duration: Optional[str] = None,
+        scheduled_date: Optional[str] = None,
         scheduled_time: Optional[str] = None,
         notes: Optional[str] = None,
         subtopics: Optional[List[Dict[str, Any]]] = None,
@@ -163,6 +166,8 @@ class TaskManager:
             task.priority = TaskPriority.normalize(priority)
         if duration is not None:
             task.duration = duration.strip() or "1 hr"
+        if scheduled_date is not None:
+            task.scheduled_date = scheduled_date.strip()
         if scheduled_time is not None:
             task.scheduled_time = scheduled_time.strip()
         if notes is not None:
@@ -178,6 +183,26 @@ class TaskManager:
 
         task.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return self.save()
+
+    def get_calendar_data(self) -> Dict[str, Dict[str, int]]:
+        """Return per-date task counts and status breakdown for calendar view."""
+        calendar: Dict[str, Dict[str, int]] = {}
+        for task in self.tasks:
+            date_key = task.scheduled_date or task.created_at[:10]
+            if not date_key:
+                continue
+            if date_key not in calendar:
+                calendar[date_key] = {"total": 0, "completed": 0, "in_progress": 0, "pending": 0, "blocked": 0}
+            calendar[date_key]["total"] += 1
+            if task.status == TaskStatus.COMPLETED.value:
+                calendar[date_key]["completed"] += 1
+            elif task.status == TaskStatus.IN_PROGRESS.value:
+                calendar[date_key]["in_progress"] += 1
+            elif task.status == TaskStatus.BLOCKED.value:
+                calendar[date_key]["blocked"] += 1
+            else:
+                calendar[date_key]["pending"] += 1
+        return calendar
 
     def delete_task(self, task_id: int) -> bool:
         """Delete task by ID."""

@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 
 export default function TaskForm({ onAddTask }) {
+  const todayStr = new Date().toISOString().split('T')[0];
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('General');
   const [priority, setPriority] = useState('Medium');
   const [duration, setDuration] = useState('1 hr');
+  const [scheduledDate, setScheduledDate] = useState(todayStr);
+  const [scheduledTime, setScheduledTime] = useState('');
   const [notes, setNotes] = useState('');
 
   const handleSubmit = (e) => {
@@ -16,12 +19,16 @@ export default function TaskForm({ onAddTask }) {
       category: category.trim() || 'General',
       priority,
       duration,
+      scheduled_date: scheduledDate || todayStr,
+      scheduled_time: scheduledTime || '',
       notes: notes.trim(),
       status: 'Pending',
     });
 
     setTitle('');
     setNotes('');
+    setScheduledDate(todayStr);
+    setScheduledTime('');
   };
 
   return (
@@ -61,6 +68,26 @@ export default function TaskForm({ onAddTask }) {
           </div>
         </div>
 
+        <div className="form-row">
+          <div className="form-group">
+            <label>📅 Scheduled Date</label>
+            <input
+              type="date"
+              value={scheduledDate}
+              onChange={(e) => setScheduledDate(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>⏰ Scheduled Time</label>
+            <input
+              type="time"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+        </div>
+
         <div className="form-group">
           <label>Estimated Duration</label>
           <select value={duration} onChange={(e) => setDuration(e.target.value)}>
@@ -88,3 +115,4 @@ export default function TaskForm({ onAddTask }) {
     </div>
   );
 }
+

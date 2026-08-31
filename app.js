@@ -269,7 +269,7 @@ async function fetchTasks() {
     state.stats = data.stats;
 
     renderStats();
-    renderTodoList();
+    renderTasks();
     renderPomoTaskSelect();
   } catch (err) {
     if (IS_GITHUB_PAGES || err.message.includes('Failed to load') || err.name === 'TypeError') {
@@ -284,7 +284,7 @@ async function fetchTasks() {
       state.tasks = tasks;
       state.stats = calculateLocalStorageStats(getStoredTasksFromLocalStorage());
       renderStats();
-      renderTodoList();
+      renderTasks();
       renderPomoTaskSelect();
       return;
     }
@@ -819,7 +819,7 @@ function deriveTopicState(subtopics) {
 }
 
 function renderTasks() {
-  const container = document.getElementById('task-list-container');
+  const container = document.getElementById('todo-list') || document.getElementById('task-list-container');
   if (!container) return;
 
   container.innerHTML = '';
@@ -972,6 +972,10 @@ function renderTasks() {
 
     container.appendChild(item);
   });
+}
+
+function renderTodoList() {
+  return renderTasks();
 }
 
 function renderPomoTaskSelect() {
@@ -1186,7 +1190,32 @@ function closeMentorEmailModal() {
   document.getElementById('email-modal').classList.remove('active');
 }
 
-function sendGmailEmail() {
+async function bulkDeleteTasks(ids) {
+  if (!ids || ids.length === 0) return;
+  try {
+    const res = await fetch('/api/tasks/bulk-delete', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ ids })
+    });
+    if (!res.ok) throw new Error("Failed to delete tasks");
+    const data = await res.json();
+    showToast(`🗑️ Auto-deleted ${data.deleted_count || ids.length} tasks from queue!`, 'info');
+    await fetchTasks();
+  } catch (err) {
+    if (IS_GITHUB_PAGES || err.name === 'TypeError') {
+      let allTasks = getStoredTasksFromLocalStorage();
+      allTasks = allTasks.filter(t => !ids.includes(t.id));
+      setStoredTasksToLocalStorage(allTasks);
+      showToast(`🗑️ Auto-deleted ${ids.length} tasks from queue!`, 'info');
+      await fetchTasks();
+      return;
+    }
+    showToast(`Bulk Delete Error: ${err.message}`, 'error');
+  }
+}
+
+async function sendGmailEmail() {
   const mentorEmail = document.getElementById('mentor-email-input').value.trim() || 'mentor@brototype.com';
   localStorage.setItem('mentor_email', mentorEmail);
   state.mentorEmail = mentorEmail;
@@ -1197,9 +1226,16 @@ function sendGmailEmail() {
   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(mentorEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.open(gmailUrl, '_blank');
   showToast('Opening Gmail web compose...', 'info');
+
+  const autoDeleteChecked = document.getElementById('auto-delete-tasks-checkbox')?.checked ?? true;
+  if (autoDeleteChecked && state.tasks.length > 0) {
+    const idsToDelete = state.tasks.map(t => t.id);
+    await bulkDeleteTasks(idsToDelete);
+  }
+  closeMentorEmailModal();
 }
 
-function sendMailtoEmail() {
+async function sendMailtoEmail() {
   const mentorEmail = document.getElementById('mentor-email-input').value.trim() || 'mentor@brototype.com';
   localStorage.setItem('mentor_email', mentorEmail);
   state.mentorEmail = mentorEmail;
@@ -1210,6 +1246,13 @@ function sendMailtoEmail() {
   const mailtoUrl = `mailto:${encodeURIComponent(mentorEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.open(mailtoUrl, '_blank');
   showToast('Opening system mail app...', 'info');
+
+  const autoDeleteChecked = document.getElementById('auto-delete-tasks-checkbox')?.checked ?? true;
+  if (autoDeleteChecked && state.tasks.length > 0) {
+    const idsToDelete = state.tasks.map(t => t.id);
+    await bulkDeleteTasks(idsToDelete);
+  }
+  closeMentorEmailModal();
 }
 
 function copyReportToClipboard() {
@@ -1219,6 +1262,62 @@ function copyReportToClipboard() {
   }).catch(() => {
     showToast('Failed to copy text', 'error');
   });
+}
+
+function initAutoScheduler() {
+  const toggle = document.getElementById('auto-schedule-toggle');
+  const timeInput = document.getElementById('auto-schedule-time-input');
+
+  const savedEnabled = localStorage.getItem('auto_schedule_enabled') !== 'false';
+  const savedTime = localStorage.getItem('auto_schedule_time') || '21:00';
+
+  if (toggle) {
+    toggle.checked = savedEnabled;
+    toggle.addEventListener('change', (e) => {
+      localStorage.setItem('auto_schedule_enabled', e.target.checked);
+      if (timeInput) timeInput.disabled = !e.target.checked;
+      showToast(e.target.checked ? `⏰ Auto-schedule enabled for ${timeInput ? timeInput.value : savedTime}` : '⏰ Auto-schedule disabled', 'info');
+    });
+  }
+
+  if (timeInput) {
+    timeInput.value = savedTime;
+    timeInput.disabled = !savedEnabled;
+    timeInput.addEventListener('change', (e) => {
+      localStorage.setItem('auto_schedule_time', e.target.value);
+      showToast(`⏰ Daily report schedule set to ${e.target.value}`, 'info');
+    });
+  }
+
+  // Background interval check for auto-scheduling
+  setInterval(async () => {
+    const isEnabled = localStorage.getItem('auto_schedule_enabled') !== 'false';
+    if (!isEnabled) return;
+
+    const scheduledTime = localStorage.getItem('auto_schedule_time') || '21:00';
+    const autoDeleteOnSend = localStorage.getItem('auto_delete_on_send') !== 'false';
+
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    const currentTimeStr = `${hours}:${mins}`;
+    const todayDateStr = now.toISOString().split('T')[0];
+
+    const lastSent = localStorage.getItem('last_auto_sent_date');
+
+    if (currentTimeStr === scheduledTime && lastSent !== todayDateStr) {
+      if (state.tasks && state.tasks.length > 0) {
+        localStorage.setItem('last_auto_sent_date', todayDateStr);
+        showToast(`⏰ Auto-scheduled daily report trigger reached (${scheduledTime})! Clearing queue...`, 'info');
+
+        if (autoDeleteOnSend) {
+          const idsToDelete = state.tasks.map(t => t.id);
+          await bulkDeleteTasks(idsToDelete);
+        }
+        openMentorEmailModal();
+      }
+    }
+  }, 15000);
 }
 
 function escapeHtml(str) {
@@ -1242,6 +1341,7 @@ function safeAddListener(id, event, handler) {
 document.addEventListener('DOMContentLoaded', () => {
   checkAuthStatus();
   fetchTasks();
+  initAutoScheduler();
 
   // Authentication Handlers
   safeAddListener('login-modal-btn', 'click', () => openAuthModal('login'));
@@ -1975,5 +2075,112 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('🔑 Verification link detected! Please enter your new password below.', 'info');
     }
   } catch (err) {}
+
+  // Initialize Cyberpunk Live Day Progress & Countdown HUD
+  initCyberDateHUD();
 });
+
+function getOrdinalSuffix(day) {
+  if (day > 3 && day < 21) return 'th';
+  switch (day % 10) {
+    case 1:  return 'st';
+    case 2:  return 'nd';
+    case 3:  return 'rd';
+    default: return 'th';
+  }
+}
+
+function initCyberDateHUD() {
+  function updateHUD() {
+    const dayNameEl = document.getElementById('hud-day-name');
+    const dateDetailsEl = document.getElementById('hud-date-details');
+    const clockTextEl = document.getElementById('hud-clock-text');
+    const shiftTextEl = document.getElementById('hud-shift-text');
+    const shiftPillEl = document.getElementById('hud-shift-pill');
+    const countdownPillEl = document.getElementById('hud-countdown-pill');
+    const countdownTextEl = document.getElementById('hud-countdown-text');
+    const progressBarEl = document.getElementById('hud-progress-bar');
+    const progressLabelEl = document.getElementById('hud-progress-label');
+
+    if (!dayNameEl || !clockTextEl) return;
+
+    const now = new Date();
+
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const dayName = daysOfWeek[now.getDay()];
+    const dateNum = now.getDate();
+    const ordinal = getOrdinalSuffix(dateNum);
+    const monthName = months[now.getMonth()];
+    const year = now.getFullYear();
+
+    dayNameEl.textContent = dayName;
+    dateDetailsEl.innerHTML = `${dateNum}<sup>${ordinal}</sup> ${monthName} ${year}`;
+
+    let hours = now.getHours();
+    const minutes = now.getMinutes();
+    const seconds = now.getSeconds();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    const pad = (n) => String(n).padStart(2, '0');
+
+    clockTextEl.textContent = `${displayHours}:${pad(minutes)}:${pad(seconds)} ${ampm}`;
+
+    let shiftLabel = '☀️ Morning Kickoff';
+    let shiftColor = '#f59e0b';
+    if (hours >= 12 && hours < 17) {
+      shiftLabel = '🔥 Afternoon Grind';
+      shiftColor = '#f97316';
+    } else if (hours >= 17 && hours < 22) {
+      shiftLabel = '🎯 Evening Deadline Sprint';
+      shiftColor = '#ec4899';
+    } else if (hours >= 22 || hours < 5) {
+      shiftLabel = '⚡ Night Owl Focus Mode';
+      shiftColor = '#a855f7';
+    }
+
+    if (shiftTextEl) shiftTextEl.textContent = shiftLabel;
+    if (shiftPillEl) {
+      shiftPillEl.style.borderColor = shiftColor;
+      shiftPillEl.style.color = shiftColor;
+    }
+
+    const autoScheduleTimeInput = document.getElementById('auto-schedule-time-input');
+    const autoScheduleTime = autoScheduleTimeInput ? autoScheduleTimeInput.value : '21:00';
+    const [targetH, targetM] = (autoScheduleTime || '21:00').split(':').map(Number);
+    const targetDate = new Date(now);
+    targetDate.setHours(targetH, targetM, 0, 0);
+
+    const diffMs = targetDate - now;
+
+    if (diffMs > 0) {
+      const diffMinsTotal = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMinsTotal / 60);
+      const diffMins = diffMinsTotal % 60;
+      const diffSecs = Math.floor((diffMs % 60000) / 1000);
+
+      if (diffHours > 0) {
+        countdownTextEl.textContent = `⏳ ${diffHours}h ${diffMins}m until ${autoScheduleTime || '9:00 PM'} Mentor Report`;
+        if (countdownPillEl) countdownPillEl.classList.remove('urgent-glow');
+      } else {
+        countdownTextEl.textContent = `🚨 ${diffMins}m ${diffSecs}s UNTIL MENTOR REPORT DEADLINE!`;
+        if (countdownPillEl) countdownPillEl.classList.add('urgent-glow');
+      }
+    } else {
+      countdownTextEl.textContent = `✅ Today's Mentor Deadline Passed (${autoScheduleTime || '9:00 PM'})`;
+      if (countdownPillEl) countdownPillEl.classList.remove('urgent-glow');
+    }
+
+    const secondsPassedInDay = hours * 3600 + minutes * 60 + seconds;
+    const dayProgressPercent = Math.min(100, Math.max(0, Math.round((secondsPassedInDay / 86400) * 100)));
+
+    if (progressBarEl) progressBarEl.style.width = `${dayProgressPercent}%`;
+    if (progressLabelEl) progressLabelEl.textContent = `${dayProgressPercent}% of ${dayName} Completed`;
+  }
+
+  updateHUD();
+  setInterval(updateHUD, 1000);
+}
+
 

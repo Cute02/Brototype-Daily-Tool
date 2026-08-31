@@ -50,6 +50,7 @@ class Task:
     status: str = TaskStatus.PENDING.value
     priority: str = TaskPriority.MEDIUM.value
     duration: str = "1 hr"
+    scheduled_date: str = ""
     scheduled_time: str = ""
     created_at: str = ""
     updated_at: str = ""
@@ -64,6 +65,13 @@ class Task:
             self.updated_at = now
         if not self.duration:
             self.duration = "1 hr"
+
+        # Auto-populate scheduled_date from created_at if not set
+        if not self.scheduled_date:
+            try:
+                self.scheduled_date = self.created_at[:10]  # "YYYY-MM-DD"
+            except (TypeError, IndexError):
+                self.scheduled_date = datetime.now().strftime("%Y-%m-%d")
 
         if self.subtopics is None:
             self.subtopics = []
@@ -118,6 +126,7 @@ class Task:
             status=str(data.get("status", TaskStatus.PENDING.value)),
             priority=str(data.get("priority", TaskPriority.MEDIUM.value)),
             duration=str(data.get("duration", "1 hr")),
+            scheduled_date=str(data.get("scheduled_date", "")),
             scheduled_time=str(data.get("scheduled_time", "")),
             created_at=str(data.get("created_at", "")),
             updated_at=str(data.get("updated_at", "")),

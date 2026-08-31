@@ -68,6 +68,12 @@ export default function TaskCard({
           <span className={`badge badge-${prioClass}`}>🔴 {task.priority} Priority</span>
           <span className="badge badge-duration">⏱ {task.duration || '1 hr'}</span>
           <span className="badge badge-category">{task.category}</span>
+          {(task.scheduled_date || task.scheduled_time) && (
+            <span className="badge badge-schedule" title={`Scheduled: ${task.scheduled_date || ''} ${task.scheduled_time || ''}`}>
+              {task.scheduled_date && `📅 ${new Date(task.scheduled_date + 'T00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+              {task.scheduled_time && ` · ⏰ ${task.scheduled_time}`}
+            </span>
+          )}
           {subtopics.length > 0 && (
             <span className="badge subtopic-badge">📑 {completedSubtopics}/{subtopics.length} Subtopics</span>
           )}

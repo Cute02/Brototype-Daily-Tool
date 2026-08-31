@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import { getApiUrl } from './config/api';
-import Navbar from './components/Navbar';
+import Header from './components/Header';
+import DateHUD from './components/DateHUD';
 import StatsDashboard from './components/StatsDashboard';
 import PomodoroTimer from './components/PomodoroTimer';
 import CircularProgress from './components/CircularProgress';
+import TaskCalendar from './components/TaskCalendar';
 import TaskCard from './components/TaskCard';
 import TaskModal from './components/TaskModal';
 import MentorEmailModal from './components/MentorEmailModal';
@@ -82,6 +83,7 @@ export default function App() {
   const [filter, setFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState('priority');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDate, setSelectedDate] = useState(null);
 
   // Modals State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -90,6 +92,17 @@ export default function App() {
   const [isPdfOpen, setIsPdfOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState('login');
+
+  // Auto-Schedule & Auto-Delete State
+  const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(
+    localStorage.getItem('auto_schedule_enabled') !== 'false'
+  );
+  const [autoScheduleTime, setAutoScheduleTime] = useState(
+    localStorage.getItem('auto_schedule_time') || '21:00'
+  );
+  const [autoDeleteOnSend, setAutoDeleteOnSend] = useState(
+    localStorage.getItem('auto_delete_on_send') !== 'false'
+  );
 
   // User & Auth State
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || null);
@@ -328,23 +341,75 @@ export default function App() {
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedTaskIds.length === 0) return;
+  const handleBulkDelete = useCallback(async (idsToDelete = null) => {
+    const ids = Array.isArray(idsToDelete) ? idsToDelete : selectedTaskIds;
+    if (!ids || ids.length === 0) return;
     try {
+      if (IS_GITHUB_PAGES) {
+        let lsTasks = getStoredTasksFromLS();
+        lsTasks = lsTasks.filter(t => !ids.includes(t.id));
+        saveStoredTasksToLS(lsTasks);
+        setSelectedTaskIds([]);
+        await fetchTasks();
+        showToast(`🗑️ Auto-deleted ${ids.length} tasks from queue!`, 'info');
+        return;
+      }
       const res = await fetch(getApiUrl('/api/tasks/bulk-delete'), {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ ids: selectedTaskIds }),
+        body: JSON.stringify({ ids }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete selected tasks');
 
-      showToast(`🗑️ Deleted ${data.deleted_count} selected tasks!`, 'info');
+      showToast(`🗑️ Auto-deleted ${data.deleted_count} tasks from queue!`, 'info');
       setSelectedTaskIds([]);
       await fetchTasks();
     } catch (err) {
       showToast(`Bulk Delete Error: ${err.message}`, 'error');
     }
+  }, [selectedTaskIds, getAuthHeaders, fetchTasks, showToast]);
+
+  // Auto-Scheduler Timer Effect
+  useEffect(() => {
+    if (!autoScheduleEnabled) return;
+
+    const checkAutoSchedule = async () => {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${mins}`;
+      const todayStr = now.toISOString().split('T')[0];
+      const lastSent = localStorage.getItem('last_auto_sent_date');
+
+      if (timeStr === autoScheduleTime && lastSent !== todayStr) {
+        if (tasks.length > 0) {
+          localStorage.setItem('last_auto_sent_date', todayStr);
+          showToast(`⏰ Auto-scheduled report trigger reached (${autoScheduleTime})! Clearing task queue...`, 'info');
+
+          if (autoDeleteOnSend) {
+            const idsToDelete = tasks.map((t) => t.id);
+            await handleBulkDelete(idsToDelete);
+          }
+          setIsMentorEmailOpen(true);
+        }
+      }
+    };
+
+    const interval = setInterval(checkAutoSchedule, 15000);
+    return () => clearInterval(interval);
+  }, [autoScheduleEnabled, autoScheduleTime, autoDeleteOnSend, tasks, handleBulkDelete, showToast]);
+
+  const handleToggleAutoSchedule = (val) => {
+    setAutoScheduleEnabled(val);
+    localStorage.setItem('auto_schedule_enabled', val);
+    showToast(val ? `⏰ Auto-schedule enabled for ${autoScheduleTime}` : '⏰ Auto-schedule disabled', 'info');
+  };
+
+  const handleChangeAutoScheduleTime = (timeVal) => {
+    setAutoScheduleTime(timeVal);
+    localStorage.setItem('auto_schedule_time', timeVal);
+    showToast(`⏰ Scheduled daily email time set to ${timeVal}`, 'info');
   };
 
   const handleDeleteTask = async (id) => {
@@ -557,14 +622,21 @@ export default function App() {
         onOpenAuthModal={(tab) => { setAuthTab(tab); setIsAuthOpen(true); }}
         onLogout={handleLogout}
         onOpenPdfModal={() => setIsPdfOpen(true)}
-        onOpenEmailModal={() => setIsEmailOpen(true)}
+        onOpenEmailModal={() => setIsMentorEmailOpen(true)}
+        autoScheduleEnabled={autoScheduleEnabled}
+        autoScheduleTime={autoScheduleTime}
+        onToggleAutoSchedule={handleToggleAutoSchedule}
+        onChangeAutoScheduleTime={handleChangeAutoScheduleTime}
       />
+
+      <DateHUD autoScheduleTime={autoScheduleTime} />
 
       <StatsDashboard stats={stats} />
 
       <div className="main-layout">
         <div className="sidebar-layout">
           <TaskForm onAddTask={handleAddTask} />
+          <TaskCalendar tasks={tasks} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
           <CircularProgress stats={stats} />
           <PomodoroTimer tasks={tasks} onUpdateTaskStatus={handleUpdateStatus} showToast={showToast} />
         </div>
@@ -612,27 +684,36 @@ export default function App() {
           </div>
 
           <div className="todo-list">
-            {tasks.length === 0 ? (
-              <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                <p style={{ fontSize: '32px', marginBottom: '8px' }}>📋</p>
-                <p>No tasks found. Add a daily task to get started!</p>
-              </div>
-            ) : (
-              tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  isSelected={selectedTaskIds.includes(task.id)}
-                  onToggleSelect={handleToggleSelectTask}
-                  onUpdateStatus={handleUpdateStatus}
-                  onToggleSubtopic={handleToggleSubtopic}
-                  onAddSubtopic={handleAddSubtopic}
-                  onDeleteSubtopic={handleDeleteSubtopic}
-                  onOpenEditModal={(t) => setEditingTask(t)}
-                  onDelete={handleDeleteTask}
-                />
-              ))
-            )}
+            {(() => {
+              let displayTasks = tasks;
+              if (selectedDate) {
+                displayTasks = displayTasks.filter((t) => {
+                  const taskDate = t.scheduled_date || (t.created_at ? t.created_at.slice(0, 10) : '');
+                  return taskDate === selectedDate;
+                });
+              }
+              return displayTasks.length === 0 ? (
+                <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <p style={{ fontSize: '32px', marginBottom: '8px' }}>📋</p>
+                  <p>{selectedDate ? `No tasks scheduled for ${selectedDate}` : 'No tasks found. Add a daily task to get started!'}</p>
+                </div>
+              ) : (
+                displayTasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    isSelected={selectedTaskIds.includes(task.id)}
+                    onToggleSelect={handleToggleSelectTask}
+                    onUpdateStatus={handleUpdateStatus}
+                    onToggleSubtopic={handleToggleSubtopic}
+                    onAddSubtopic={handleAddSubtopic}
+                    onDeleteSubtopic={handleDeleteSubtopic}
+                    onOpenEditModal={(t) => setEditingTask(t)}
+                    onDelete={handleDeleteTask}
+                  />
+                ))
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -708,6 +789,24 @@ export default function App() {
                   </select>
                 </div>
               </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>📅 Scheduled Date</label>
+                  <input
+                    type="date"
+                    value={editingTask.scheduled_date || ''}
+                    onChange={(e) => setEditingTask({ ...editingTask, scheduled_date: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>⏰ Scheduled Time</label>
+                  <input
+                    type="time"
+                    value={editingTask.scheduled_time || ''}
+                    onChange={(e) => setEditingTask({ ...editingTask, scheduled_time: e.target.value })}
+                  />
+                </div>
+              </div>
               <div className="form-group">
                 <label>Notes</label>
                 <textarea
@@ -740,12 +839,13 @@ export default function App() {
 
       {/* Mentor Email Modal */}
       <MentorEmailModal
-        isOpen={isEmailOpen}
-        onClose={() => setIsEmailOpen(false)}
+        isOpen={isMentorEmailOpen}
+        onClose={() => setIsMentorEmailOpen(false)}
         tasks={tasks}
         stats={stats}
         currentUser={currentUser}
         showToast={showToast}
+        onClearQueue={handleBulkDelete}
       />
 
       {/* Auth Modal */}
