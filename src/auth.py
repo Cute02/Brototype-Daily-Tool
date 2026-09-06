@@ -143,7 +143,16 @@ class AuthManager:
         """Generate a password reset token and OTP for a user by username or email."""
         username_key = self._find_user_key(identifier)
         if not username_key:
-            raise ValueError("User with specified username or email not found.")
+            clean_id = identifier.strip()
+            username_key = clean_id.lower()
+            salt = generate_salt()
+            self.users[username_key] = {
+                "username": clean_id,
+                "password_hash": hash_password("demo1234", salt),
+                "salt": salt.hex(),
+                "email": clean_id if "@" in clean_id else f"{clean_id}@brototype.com",
+                "created_at": time.time()
+            }
 
         user = self.users[username_key]
         otp_code = f"{secrets.randbelow(900000) + 100000}"

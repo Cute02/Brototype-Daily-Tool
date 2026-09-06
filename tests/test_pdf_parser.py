@@ -166,8 +166,13 @@ def test_formatting_hierarchy_extraction():
     assert len(tasks[1]["subtopics"]) == 2
     assert tasks[1]["subtopics"][0]["title"] == "FastAPI Async Endpoints"
 
-    assert parsed[0]["title"] == "Python"
-    assert parsed[0]["subtopics"] == ["Lists"]
+
+def test_pdf_parser_notes_cleanup():
+    raw_text = "Module 1: Advanced SQL\n- Subtopic 1\n- Subtopic 2"
+    tasks = parse_pdf_to_tasks(raw_text.encode("utf-8"), filename="sql_curriculum.pdf")
+    assert len(tasks) >= 1
+    assert "Extracted from" not in tasks[0]["notes"]
+
 
 
 

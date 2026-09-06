@@ -321,7 +321,7 @@ def extract_formatting_hierarchy(spans: List[Dict[str, Any]], filename: str = ""
                 "category": current_module,
                 "priority": prio,
                 "duration": dur,
-                "notes": f"Extracted from {filename or 'document'}.",
+                "notes": "",
                 "status": "Pending",
                 "is_highlighted": is_bold,
                 "subtopics": []
@@ -336,7 +336,7 @@ def extract_formatting_hierarchy(spans: List[Dict[str, Any]], filename: str = ""
                     "category": current_module,
                     "priority": "Medium",
                     "duration": "1 hr",
-                    "notes": f"Extracted from {filename or 'document'}.",
+                    "notes": "",
                     "status": "Pending",
                     "is_highlighted": False,
                     "subtopics": []
@@ -588,7 +588,7 @@ def extract_subtopics_with_hf_ai(
             "category": category_name,
             "priority": infer_priority(main_title, ""),
             "duration": infer_duration(main_title, ""),
-            "notes": f"AI Extracted via Hugging Face ({model})",
+            "notes": "",
             "status": "Pending",
             "is_highlighted": False,
             "subtopics": subtopics_list
@@ -615,7 +615,7 @@ def parse_pdf_to_tasks(
             "category": "Module Import",
             "priority": "Medium",
             "duration": "1 hr",
-            "notes": "Document imported. Subtopics automatically generated.",
+            "notes": "",
             "status": "Pending",
             "is_highlighted": False,
             "subtopics": []
@@ -712,7 +712,7 @@ def parse_pdf_to_tasks(
                         "category": current_module,
                         "priority": prio,
                         "duration": dur,
-                        "notes": f"Extracted from {filename or 'document'}. Topic: {main_part_clean}",
+                        "notes": "",
                         "status": "Pending",
                         "is_highlighted": is_bold_hl,
                         "subtopics": subtopics_list

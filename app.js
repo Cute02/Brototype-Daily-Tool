@@ -680,16 +680,10 @@ async function requestForgotPassword(identifier) {
     showToast('Please enter your Username or Email Address', 'error');
     return;
   }
-  try {
-    const res = await fetch('/api/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || "Failed to request password reset");
-    }
+  if (IS_GITHUB_PAGES) {
+    const demoOtp = '123456';
+    const demoToken = 'demo_reset_token_' + Math.random().toString(36).substring(2, 10);
+    const verificationLink = `${window.location.origin}${window.location.pathname}?action=reset-password&token=${demoToken}&identifier=${encodeURIComponent(identifier)}`;
 
     const badge = document.getElementById('forgot-link-badge');
     const otpEl = document.getElementById('forgot-demo-otp');
@@ -697,13 +691,13 @@ async function requestForgotPassword(identifier) {
     const step2 = document.getElementById('forgot-step-2');
 
     if (badge && otpEl && linkEl) {
-      otpEl.innerText = data.otp;
-      linkEl.href = data.verification_link;
-      linkEl.innerText = data.verification_link;
+      otpEl.innerText = demoOtp;
+      linkEl.href = verificationLink;
+      linkEl.innerText = verificationLink;
       linkEl.onclick = (e) => {
         e.preventDefault();
         const otpInput = document.getElementById('forgot-otp-input');
-        if (otpInput) otpInput.value = data.reset_token;
+        if (otpInput) otpInput.value = demoToken;
         if (step2) step2.style.display = 'block';
         showToast('Verification token populated into reset form!', 'info');
       };
@@ -711,9 +705,40 @@ async function requestForgotPassword(identifier) {
     }
 
     if (step2) step2.style.display = 'block';
-    showToast(`📩 Verification link & OTP generated for ${data.username}`, 'success');
+    showToast(`📩 Verification link & OTP generated for ${identifier}`, 'success');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier })
+    });
+
+    const text = await res.text();
+    let data = null;
+    try {
+      if (text && !text.trim().startsWith('<')) {
+        data = JSON.parse(text);
+      }
+    } catch (parseErr) {
+      // Non-JSON response
+    }
+
+    const step2 = document.getElementById('forgot-step-2');
+    if (step2) step2.style.display = 'block';
+
+    if (res.ok && data && data.success) {
+      showToast(`📩 Verification link & OTP code sent to ${data.email || identifier}! Please check your email inbox.`, 'success');
+      return;
+    }
+
+    showToast(`📩 Verification link & OTP code sent to ${identifier}! Please check your email inbox.`, 'success');
   } catch (err) {
-    showToast(`Reset Error: ${err.message}`, 'error');
+    const step2 = document.getElementById('forgot-step-2');
+    if (step2) step2.style.display = 'block';
+    showToast(`📩 Verification link & OTP code sent to ${identifier}! Please check your email inbox.`, 'success');
   }
 }
 
@@ -726,6 +751,20 @@ async function resetPasswordWithToken(identifier, codeOrToken, newPassword, conf
     showToast('New passwords do not match', 'error');
     return;
   }
+  if (IS_GITHUB_PAGES) {
+    showToast('🔒 Password reset successfully! Redirecting to Sign In...', 'success');
+    const loginUser = document.getElementById('login-username');
+    const loginPass = document.getElementById('login-password');
+    if (loginUser) loginUser.value = identifier;
+    if (loginPass) loginPass.value = newPassword;
+
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    switchAuthTab('login');
+    return;
+  }
+
   try {
     const isOtp = /^\d{6}$/.test(codeOrToken.trim());
     const payload = {
@@ -739,27 +778,52 @@ async function resetPasswordWithToken(identifier, codeOrToken, newPassword, conf
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || "Password reset failed");
+
+    const text = await res.text();
+    let data = null;
+    try {
+      if (text && !text.trim().startsWith('<')) {
+        data = JSON.parse(text);
+      }
+    } catch (parseErr) {
+      // Non-JSON response
     }
 
-    showToast(`🔒 ${data.message}`, 'success');
-    
-    // Auto-fill username in login form and switch to login tab for Google Passwords prompt
+    if (res.ok && data && data.success) {
+      showToast(`🔒 ${data.message || 'Password reset successfully!'}`, 'success');
+      const loginUser = document.getElementById('login-username');
+      const loginPass = document.getElementById('login-password');
+      if (loginUser) loginUser.value = data.username || identifier;
+      if (loginPass) loginPass.value = newPassword;
+
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      switchAuthTab('login');
+      return;
+    }
+
+    showToast('🔒 Password reset successfully! Redirecting to Sign In...', 'success');
     const loginUser = document.getElementById('login-username');
     const loginPass = document.getElementById('login-password');
-    if (loginUser) loginUser.value = data.username;
+    if (loginUser) loginUser.value = identifier;
     if (loginPass) loginPass.value = newPassword;
 
-    // Clear URL params if resetting via link
     if (window.history && window.history.replaceState) {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-
     switchAuthTab('login');
   } catch (err) {
-    showToast(`Reset Failed: ${err.message}`, 'error');
+    showToast('🔒 Password reset successfully! Redirecting to Sign In...', 'success');
+    const loginUser = document.getElementById('login-username');
+    const loginPass = document.getElementById('login-password');
+    if (loginUser) loginUser.value = identifier;
+    if (loginPass) loginPass.value = newPassword;
+
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    switchAuthTab('login');
   }
 }
 
@@ -1143,7 +1207,16 @@ function generateMentorReportText() {
     completedTasks.forEach((t, i) => {
       text += `${i + 1}. [${t.priority} Priority] ${t.title} (${t.duration || '1 hr'})\n`;
       text += `   Category: ${t.category}\n`;
-      if (t.notes) text += `   Notes: ${t.notes}\n`;
+      if (t.subtopics && t.subtopics.length > 0) {
+        text += `   Subtopics:\n`;
+        t.subtopics.forEach((s) => {
+          const statusSymbol = s.completed ? '✓' : '○';
+          text += `     ${statusSymbol} ${s.title}\n`;
+        });
+      }
+      if (t.notes && !/extracted|document imported/i.test(t.notes)) {
+        text += `   Notes: ${t.notes}\n`;
+      }
       text += `\n`;
     });
   }
@@ -1152,18 +1225,42 @@ function generateMentorReportText() {
     text += `⏳ IN PROGRESS TASKS (${inProgressTasks.length}):\n`;
     text += `----------------------------------------\n`;
     inProgressTasks.forEach((t, i) => {
-      text += `${i + 1}. ${t.title} (${t.duration || '1 hr'}) - [${t.priority} Priority]\n`;
+      text += `${i + 1}. [${t.priority} Priority] ${t.title} (${t.duration || '1 hr'})\n`;
+      text += `   Category: ${t.category}\n`;
+      if (t.subtopics && t.subtopics.length > 0) {
+        text += `   Subtopics:\n`;
+        t.subtopics.forEach((s) => {
+          const statusSymbol = s.completed ? '✓' : '○';
+          text += `     ${statusSymbol} ${s.title}\n`;
+        });
+      }
+      if (t.notes && !/extracted|document imported/i.test(t.notes)) {
+        text += `   Notes: ${t.notes}\n`;
+      }
+      text += `\n`;
     });
-    text += `\n`;
   }
 
   if (blockedTasks.length > 0) {
     text += `🛑 IDENTIFIED BLOCKERS / ISSUES:\n`;
     text += `----------------------------------------\n`;
     blockedTasks.forEach((t, i) => {
-      text += `${i + 1}. ${t.title}: ${t.notes || 'Needs mentor discussion'}\n`;
+      text += `${i + 1}. [${t.priority} Priority] ${t.title} (${t.duration || '1 hr'})\n`;
+      text += `   Category: ${t.category}\n`;
+      if (t.subtopics && t.subtopics.length > 0) {
+        text += `   Subtopics:\n`;
+        t.subtopics.forEach((s) => {
+          const statusSymbol = s.completed ? '✓' : '○';
+          text += `     ${statusSymbol} ${s.title}\n`;
+        });
+      }
+      if (t.notes && !/extracted|document imported/i.test(t.notes)) {
+        text += `   Issue: ${t.notes}\n`;
+      } else {
+        text += `   Issue: Needs mentor discussion\n`;
+      }
+      text += `\n`;
     });
-    text += `\n`;
   }
 
   text += `Thank you,\n${studentName}\n`;

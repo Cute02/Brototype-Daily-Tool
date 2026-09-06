@@ -54,7 +54,7 @@ export default function AuthModal({
   };
 
   const handleRequestResetLink = async () => {
-    if (!forgotIdentifier) return;
+    if (!forgotIdentifier || !forgotIdentifier.trim()) return;
     if (onRequestReset) {
       const res = await onRequestReset(forgotIdentifier);
       if (res) {
@@ -236,24 +236,6 @@ export default function AuthModal({
               >
                 📩 Send Verification Link & OTP
               </button>
-
-              {demoResetData && (
-                <div style={{ background: '#1e293b', border: '1px solid #334155', padding: '10px', borderRadius: '6px', fontSize: '0.85rem', marginBottom: '12px' }}>
-                  <div><strong>Demo Verification Details:</strong></div>
-                  <div>OTP Code: <strong style={{ color: '#38bdf8' }}>{demoResetData.otp}</strong></div>
-                  <div style={{ wordBreak: 'break-all', marginTop: '4px' }}>
-                    Token: <span
-                      style={{ color: '#a5f3fc', textDecoration: 'underline', cursor: 'pointer' }}
-                      onClick={() => {
-                        setForgotCode(demoResetData.reset_token);
-                        setForgotStep(2);
-                      }}
-                    >
-                      Auto-fill Verification Token
-                    </span>
-                  </div>
-                </div>
-              )}
 
               {forgotStep === 2 && (
                 <>

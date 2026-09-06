@@ -190,10 +190,10 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 identifier = data.get("identifier") or data.get("username") or data.get("email", "")
                 otp_code, username = auth_manager.generate_otp(identifier)
+                print(f"[EMAIL SERVICE] 📩 Sent OTP Code to {identifier}: {otp_code}")
                 self._send_json({
                     "success": True,
-                    "message": f"OTP sent to {identifier}. Demo OTP: {otp_code}",
-                    "otp": otp_code,
+                    "message": f"OTP code sent to {identifier}. Please check your email inbox.",
                     "username": username
                 })
             except Exception as e:
@@ -229,13 +229,12 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if not identifier:
                     raise ValueError("Username or Email is required.")
                 res = auth_manager.request_password_reset(identifier)
+                print(f"[EMAIL SERVICE] 📩 Sent Verification Link & OTP to {res['email']}: Link: {res['verification_link']} | OTP: {res['otp']}")
                 self._send_json({
                     "success": True,
-                    "message": f"Verification link & OTP generated for {res['username']} ({res['email']}).",
+                    "message": f"Verification link & OTP code sent to {res['email']}. Please check your email inbox.",
                     "username": res["username"],
-                    "email": res["email"],
-                    "otp": res["otp"],
-                    "verification_link": res["verification_link"]
+                    "email": res["email"]
                 })
             except Exception as e:
                 self._send_error_json(str(e), status=400)

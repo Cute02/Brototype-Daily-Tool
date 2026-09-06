@@ -31,7 +31,16 @@ export default function MentorEmailModal({ isOpen, onClose, tasks, stats, curren
         completedTasks.forEach((t, i) => {
           text += `${i + 1}. [${t.priority} Priority] ${t.title} (${t.duration || '1 hr'})\n`;
           text += `   Category: ${t.category}\n`;
-          if (t.notes) text += `   Notes: ${t.notes}\n`;
+          if (t.subtopics && t.subtopics.length > 0) {
+            text += `   Subtopics:\n`;
+            t.subtopics.forEach((s) => {
+              const statusSymbol = s.completed ? '✓' : '○';
+              text += `     ${statusSymbol} ${s.title}\n`;
+            });
+          }
+          if (t.notes && !/extracted|document imported/i.test(t.notes)) {
+            text += `   Notes: ${t.notes}\n`;
+          }
           text += `\n`;
         });
       }
@@ -40,18 +49,42 @@ export default function MentorEmailModal({ isOpen, onClose, tasks, stats, curren
         text += `⏳ IN PROGRESS TASKS (${inProgressTasks.length}):\n`;
         text += `----------------------------------------\n`;
         inProgressTasks.forEach((t, i) => {
-          text += `${i + 1}. ${t.title} (${t.duration || '1 hr'}) - [${t.priority} Priority]\n`;
+          text += `${i + 1}. [${t.priority} Priority] ${t.title} (${t.duration || '1 hr'})\n`;
+          text += `   Category: ${t.category}\n`;
+          if (t.subtopics && t.subtopics.length > 0) {
+            text += `   Subtopics:\n`;
+            t.subtopics.forEach((s) => {
+              const statusSymbol = s.completed ? '✓' : '○';
+              text += `     ${statusSymbol} ${s.title}\n`;
+            });
+          }
+          if (t.notes && !/extracted|document imported/i.test(t.notes)) {
+            text += `   Notes: ${t.notes}\n`;
+          }
+          text += `\n`;
         });
-        text += `\n`;
       }
 
       if (blockedTasks.length > 0) {
         text += `🛑 IDENTIFIED BLOCKERS / ISSUES:\n`;
         text += `----------------------------------------\n`;
         blockedTasks.forEach((t, i) => {
-          text += `${i + 1}. ${t.title}: ${t.notes || 'Needs mentor discussion'}\n`;
+          text += `${i + 1}. [${t.priority} Priority] ${t.title} (${t.duration || '1 hr'})\n`;
+          text += `   Category: ${t.category}\n`;
+          if (t.subtopics && t.subtopics.length > 0) {
+            text += `   Subtopics:\n`;
+            t.subtopics.forEach((s) => {
+              const statusSymbol = s.completed ? '✓' : '○';
+              text += `     ${statusSymbol} ${s.title}\n`;
+            });
+          }
+          if (t.notes && !/extracted|document imported/i.test(t.notes)) {
+            text += `   Issue: ${t.notes}\n`;
+          } else {
+            text += `   Issue: Needs mentor discussion\n`;
+          }
+          text += `\n`;
         });
-        text += `\n`;
       }
 
       text += `Thank you,\n${studentName}\n`;
