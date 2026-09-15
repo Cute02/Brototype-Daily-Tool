@@ -1,5 +1,6 @@
 """Document Parser (PDF, Docx, Text, Google Drive, Web Links) & AI Bold/Highlight Extraction Engine."""
 import io
+import json
 import re
 import zipfile
 import urllib.request
@@ -97,6 +98,11 @@ def extract_pdf_spans_and_highlights(pdf_bytes: bytes) -> Tuple[str, Set[str]]:
 
     full_raw_text = "\n".join(full_text_pages) if full_text_pages else ""
     return full_raw_text, highlighted_spans
+
+
+def extract_raw_text_from_pdf(pdf_bytes: bytes, filename: str = "") -> Tuple[str, Set[str]]:
+    """Extract raw text and highlighted spans from PDF stream."""
+    return extract_pdf_spans_and_highlights(pdf_bytes)
 
 
 def extract_docx_text(docx_bytes: bytes) -> str:
@@ -303,28 +309,46 @@ def extract_formatting_hierarchy(spans: List[Dict[str, Any]], filename: str = ""
         is_bold = s["is_bold"]
 
         is_topic = False
-        # Check topic criteria: Large font size OR (Bold + font size > min_size) OR numbered header (1. Topic)
+        # Check topic criteria: Large font size OR (Bold + font size > min_size) OR numbered header (1. Topic) OR explicit duration (3 hours)
         if size >= topic_size_cutoff:
             is_topic = True
         elif is_bold and size > min_size:
             is_topic = True
         elif re.match(r"^(?:Module|Chapter|Unit|Day|Section|Part|\d+[\.\:\)])\s*", text, re.IGNORECASE) and len(text) <= 80:
             is_topic = True
+        elif any(d in text.lower() for d in ["(3 hours)", "(3 hrs)", "(2 hours)", "(2 hrs)", "(1 hour)"]):
+            is_topic = True
 
         if is_topic:
-            topic_title = re.sub(r"^(?:Module|Chapter|Unit|Day|Section|Part|\d+[\.\:\)])\s*", "", text, flags=re.IGNORECASE).strip() or text
-            prio = infer_priority(topic_title, "", is_highlighted=is_bold)
-            dur = infer_duration(topic_title, "")
+            raw_title = re.sub(r"^(?:(?:Module|Chapter|Unit|Day|Section|Part)\s*\d*[:\.\)]?|\d+[\.\:\)])\s*", "", text, flags=re.IGNORECASE).strip() or text
+            raw_title = re.sub(r"^[\•\*\-\–\—\>\+\▪\▫\◦\⁃]\s*", "", raw_title).strip()
+
+            inline_subtopics = []
+            if ":" in raw_title and not raw_title.endswith(":"):
+                parts = raw_title.split(":", 1)
+                possible_title = parts[0].strip()
+                possible_subs = parts[1].strip()
+                if len(possible_title) >= 3 and ("," in possible_subs or ";" in possible_subs):
+                    raw_title = possible_title
+                    inline_subtopics = [s.strip() for s in re.split(r"[,;]", possible_subs) if s.strip()]
+
+            prio = infer_priority(raw_title, text, is_highlighted=is_bold)
+            dur = infer_duration(raw_title, text)
+
+            subtopics_list = [
+                {"id": f"sub_{s_idx + 1}", "title": s_item, "completed": False}
+                for s_idx, s_item in enumerate(inline_subtopics)
+            ]
 
             current_task = {
-                "title": topic_title,
+                "title": raw_title,
                 "category": current_module,
                 "priority": prio,
                 "duration": dur,
                 "notes": "",
                 "status": "Pending",
                 "is_highlighted": is_bold,
-                "subtopics": []
+                "subtopics": subtopics_list
             }
             tasks.append(current_task)
         else:
@@ -373,9 +397,9 @@ def infer_priority(title: str, context: str, is_highlighted: bool = False) -> st
     """Infer task priority level."""
     combined = f"{title} {context}".lower()
     
-    if is_highlighted or any(k in combined for k in ["exam", "test", "urgent", "critical", "mandatory", "core", "must"]):
+    if is_highlighted or any(k in combined for k in ["exam", "test", "urgent", "critical", "mandatory", "core", "must", "advanced", "architecture"]):
         return "High"
-    if any(k in combined for k in ["optional", "extra", "bonus", "secondary", "minor"]):
+    if any(k in combined for k in ["optional", "extra", "bonus", "secondary", "minor", "introduction to"]):
         return "Low"
     return "Medium"
 
@@ -383,12 +407,12 @@ def infer_priority(title: str, context: str, is_highlighted: bool = False) -> st
 def infer_duration(title: str, context: str) -> str:
     """Infer duration requirement."""
     combined = f"{title} {context}".lower()
-    if any(k in combined for k in ["project", "build", "capstone", "advanced", "architecture"]):
-        return "3 hrs"
-    if any(k in combined for k in ["practice", "exercise", "lab", "deep dive", "intermediate"]):
-        return "2 hrs"
-    if any(k in combined for k in ["quick", "overview", "intro", "basics", "reading"]):
+    if any(k in combined for k in ["(30 mins)", "(30m)", "quick", "overview", "intro", "basics", "reading"]):
         return "30 mins"
+    if any(k in combined for k in ["(3 hours)", "(3 hrs)", "project", "build", "capstone", "full stack"]):
+        return "3 hrs"
+    if any(k in combined for k in ["(2 hours)", "(2 hrs)", "practice", "exercise", "lab", "deep dive", "intermediate", "advanced"]):
+        return "2 hrs"
     return "1 hr"
 
 
@@ -633,10 +657,10 @@ def parse_pdf_to_tasks(
     fn_lower = filename.lower()
     if fn_lower.endswith(".docx"):
         spans = extract_formatted_spans_from_docx(pdf_bytes)
-    elif fn_lower.endswith(".pdf") or pdf_bytes.startswith(b"%PDF"):
+    elif pdf_bytes.startswith(b"%PDF"):
         spans = extract_formatted_spans_from_pdf(pdf_bytes)
     else:
-        # Text file / general bytes
+        # Text file / raw text stream bytes
         try:
             raw_text = pdf_bytes.decode("utf-8", errors="ignore")
             lines = [l.strip() for l in raw_text.splitlines() if l.strip()]

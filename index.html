@@ -541,6 +541,10 @@
         </div>
 
         <div id="forgot-step-2" style="display: none;">
+          <div id="forgot-link-badge" style="display: none; margin-bottom: 14px; font-size: 0.85rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 8px; padding: 12px;">
+            <div style="margin-bottom: 6px;">🔑 <strong>Verification OTP:</strong> <code id="forgot-demo-otp" style="font-size: 1.1rem; color: #38bdf8; font-weight: bold; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;"></code></div>
+            <div style="word-break: break-all;">🔗 <strong>Reset Link:</strong> <a id="forgot-demo-link" href="#" style="color: #818cf8; text-decoration: underline;">Direct Reset Link</a></div>
+          </div>
           <div class="form-group">
             <label for="forgot-otp-input">Enter 6-Digit OTP or Verification Token *</label>
             <input type="text" id="forgot-otp-input" name="reset-code" placeholder="e.g. 123456 or token" required autocomplete="one-time-code">

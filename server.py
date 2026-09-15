@@ -11,6 +11,7 @@ from src.auth import AuthManager
 from src.storage import StorageManager
 from src.task_manager import TaskManager
 from src.pdf_parser import parse_pdf_to_tasks, fetch_bytes_from_url
+from src.email_service import send_password_reset_email
 
 PORT = 8000
 DIRECTORY = Path(__file__).parent.resolve()
@@ -194,7 +195,8 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({
                     "success": True,
                     "message": f"OTP code sent to {identifier}. Please check your email inbox.",
-                    "username": username
+                    "username": username,
+                    "otp": otp_code
                 })
             except Exception as e:
                 self._send_error_json(str(e), status=400)
@@ -229,13 +231,35 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if not identifier:
                     raise ValueError("Username or Email is required.")
                 res = auth_manager.request_password_reset(identifier)
-                print(f"[EMAIL SERVICE] 📩 Sent Verification Link & OTP to {res['email']}: Link: {res['verification_link']} | OTP: {res['otp']}")
-                self._send_json({
-                    "success": True,
-                    "message": f"Verification link & OTP code sent to {res['email']}. Please check your email inbox.",
-                    "username": res["username"],
-                    "email": res["email"]
-                })
+
+                # Attempt real email dispatch via SMTP
+                sent_ok, status_info = send_password_reset_email(
+                    to_email=res["email"],
+                    username=res["username"],
+                    otp_code=res["otp"],
+                    verification_link=res["verification_link"]
+                )
+
+                if sent_ok:
+                    self._send_json({
+                        "success": True,
+                        "email_sent": True,
+                        "message": f"Verification link & OTP code sent directly to {res['email']}! Please check your email inbox.",
+                        "username": res["username"],
+                        "email": res["email"]
+                    })
+                else:
+                    # Fallback if SMTP credentials not configured in .env yet
+                    self._send_json({
+                        "success": True,
+                        "email_sent": False,
+                        "message": f"Verification link & OTP generated for {res['email']}. (To send emails directly to inbox, configure SMTP_USER & SMTP_PASSWORD in .env)",
+                        "username": res["username"],
+                        "email": res["email"],
+                        "otp": res["otp"],
+                        "reset_token": res["reset_token"],
+                        "verification_link": res["verification_link"]
+                    })
             except Exception as e:
                 self._send_error_json(str(e), status=400)
             return

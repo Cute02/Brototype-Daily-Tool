@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 
@@ -149,7 +150,7 @@ class AuthManager:
             self.users[username_key] = {
                 "username": clean_id,
                 "password_hash": hash_password("demo1234", salt),
-                "salt": salt.hex(),
+                "salt": salt,
                 "email": clean_id if "@" in clean_id else f"{clean_id}@brototype.com",
                 "created_at": time.time()
             }
@@ -214,16 +215,18 @@ class AuthManager:
         if not expiry or time.time() > float(expiry):
             raise ValueError("Verification link / OTP has expired or was not requested. Please request a new one.")
 
-        token_valid = False
-        if reset_token and user.get("reset_token"):
-            token_valid = secrets.compare_digest(str(user.get("reset_token", "")), str(reset_token).strip())
+        given_code = str(reset_token or otp_code or "").strip()
+        user_token = str(user.get("reset_token", "")).strip()
+        user_otp = str(user.get("otp", "")).strip()
 
-        otp_valid = False
-        if otp_code and user.get("otp"):
-            otp_valid = secrets.compare_digest(str(user.get("otp", "")).strip(), str(otp_code).strip())
+        token_valid = bool(given_code and user_token and secrets.compare_digest(user_token, given_code))
+        otp_valid = bool(given_code and user_otp and secrets.compare_digest(user_otp, given_code))
 
         if not token_valid and not otp_valid:
-            raise ValueError("Invalid reset token or OTP code. Please check your verification link or OTP code.")
+            t_check = reset_token and user_token and secrets.compare_digest(user_token, str(reset_token).strip())
+            o_check = otp_code and user_otp and secrets.compare_digest(user_otp, str(otp_code).strip())
+            if not t_check and not o_check:
+                raise ValueError("Invalid reset token or OTP code. Please check your verification link or OTP code.")
 
 
         # Update password hash with new salt

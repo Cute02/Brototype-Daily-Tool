@@ -729,12 +729,31 @@ async function requestForgotPassword(identifier) {
     const step2 = document.getElementById('forgot-step-2');
     if (step2) step2.style.display = 'block';
 
-    if (res.ok && data && data.success) {
-      showToast(`📩 Verification link & OTP code sent to ${data.email || identifier}! Please check your email inbox.`, 'success');
+    const badge = document.getElementById('forgot-link-badge');
+    const otpEl = document.getElementById('forgot-demo-otp');
+    const linkEl = document.getElementById('forgot-demo-link');
+    const otpInput = document.getElementById('forgot-otp-input');
+
+    if (data && (data.otp || data.verification_link)) {
+      if (otpInput && data.otp) otpInput.value = data.otp;
+      if (badge && otpEl && linkEl) {
+        if (data.otp) otpEl.innerText = data.otp;
+        if (data.verification_link) {
+          linkEl.href = data.verification_link;
+          linkEl.innerText = data.verification_link;
+          linkEl.onclick = (e) => {
+            e.preventDefault();
+            if (otpInput && data.reset_token) otpInput.value = data.reset_token;
+            showToast('Verification token populated into reset form!', 'info');
+          };
+        }
+        badge.style.display = 'block';
+      }
+      showToast(`🔑 OTP Generated: ${data.otp} (Auto-filled into form!)`, 'success');
       return;
     }
 
-    showToast(`📩 Verification link & OTP code sent to ${identifier}! Please check your email inbox.`, 'success');
+    showToast(`📩 Verification link & OTP code sent to ${data?.email || identifier}! Please check your email inbox.`, 'success');
   } catch (err) {
     const step2 = document.getElementById('forgot-step-2');
     if (step2) step2.style.display = 'block';
@@ -766,11 +785,12 @@ async function resetPasswordWithToken(identifier, codeOrToken, newPassword, conf
   }
 
   try {
-    const isOtp = /^\d{6}$/.test(codeOrToken.trim());
+    const cleanCode = codeOrToken ? codeOrToken.trim() : '';
     const payload = {
-      identifier: identifier,
+      identifier: identifier.trim(),
       new_password: newPassword,
-      ...(isOtp ? { otp: codeOrToken.trim() } : { token: codeOrToken.trim() })
+      token: cleanCode,
+      otp: cleanCode
     };
 
     const res = await fetch('/api/auth/reset-password', {
@@ -803,27 +823,10 @@ async function resetPasswordWithToken(identifier, codeOrToken, newPassword, conf
       return;
     }
 
-    showToast('🔒 Password reset successfully! Redirecting to Sign In...', 'success');
-    const loginUser = document.getElementById('login-username');
-    const loginPass = document.getElementById('login-password');
-    if (loginUser) loginUser.value = identifier;
-    if (loginPass) loginPass.value = newPassword;
-
-    if (window.history && window.history.replaceState) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-    switchAuthTab('login');
+    const errorMsg = (data && data.error) ? data.error : 'Failed to reset password. Please check your verification link or OTP code.';
+    showToast(`Error: ${errorMsg}`, 'error');
   } catch (err) {
-    showToast('🔒 Password reset successfully! Redirecting to Sign In...', 'success');
-    const loginUser = document.getElementById('login-username');
-    const loginPass = document.getElementById('login-password');
-    if (loginUser) loginUser.value = identifier;
-    if (loginPass) loginPass.value = newPassword;
-
-    if (window.history && window.history.replaceState) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-    switchAuthTab('login');
+    showToast(`Error: ${err.message || 'Failed to connect to server'}`, 'error');
   }
 }
 
@@ -1434,11 +1437,35 @@ function safeAddListener(id, event, handler) {
   }
 }
 
+function checkPasswordResetUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get('action');
+  const token = params.get('token');
+  const identifier = params.get('identifier');
+
+  if (action === 'reset-password' && (token || identifier)) {
+    openAuthModal('forgot');
+    const step1 = document.getElementById('forgot-step-1');
+    const step2 = document.getElementById('forgot-step-2');
+    const identifierInput = document.getElementById('forgot-identifier');
+    const otpInput = document.getElementById('forgot-otp-input');
+
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = 'block';
+
+    if (identifierInput && identifier) identifierInput.value = identifier;
+    if (otpInput && token) otpInput.value = token;
+
+    showToast('🔑 Verification token loaded from email link! Please enter your new password.', 'info');
+  }
+}
+
 // Event Listeners Setup
 document.addEventListener('DOMContentLoaded', () => {
   checkAuthStatus();
   fetchTasks();
   initAutoScheduler();
+  checkPasswordResetUrlParams();
 
   // Authentication Handlers
   safeAddListener('login-modal-btn', 'click', () => openAuthModal('login'));
@@ -1525,6 +1552,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const p = document.getElementById('register-password')?.value || '';
       const email = document.getElementById('register-email') ? document.getElementById('register-email').value.trim() : '';
       registerUser(u, p, email);
+    });
+  }
+
+  const forgotForm = document.getElementById('forgot-password-form');
+  if (forgotForm) {
+    forgotForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const identifier = document.getElementById('forgot-identifier')?.value.trim() || '';
+      const codeOrToken = document.getElementById('forgot-otp-input')?.value.trim() || '';
+      const newPassword = document.getElementById('forgot-new-password')?.value || '';
+      const confirmPassword = document.getElementById('forgot-confirm-password')?.value || '';
+      resetPasswordWithToken(identifier, codeOrToken, newPassword, confirmPassword);
     });
   }
 
