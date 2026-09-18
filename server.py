@@ -431,7 +431,9 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self._send_error_json("Endpoint not found", status=404)
 
     def do_DELETE(self):
-        match = re.match(r"^/api/tasks/(\d+)$", self.path)
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+        match = re.match(r"^/api/tasks/(\d+)$", path)
         if match:
             task_id = int(match.group(1))
             mgr = self._get_task_manager()

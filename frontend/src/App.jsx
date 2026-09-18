@@ -348,7 +348,7 @@ export default function App() {
       if (IS_GITHUB_PAGES) {
         let lsTasks = getStoredTasksFromLS();
         lsTasks = lsTasks.filter(t => !ids.includes(t.id));
-        saveStoredTasksToLS(lsTasks);
+        setStoredTasksToLS(lsTasks);
         setSelectedTaskIds([]);
         await fetchTasks();
         showToast(`🗑️ Auto-deleted ${ids.length} tasks from queue!`, 'info');
@@ -414,6 +414,14 @@ export default function App() {
 
   const handleDeleteTask = async (id) => {
     try {
+      if (IS_GITHUB_PAGES) {
+        let lsTasks = getStoredTasksFromLS();
+        lsTasks = lsTasks.filter((t) => t.id != id);
+        setStoredTasksToLS(lsTasks);
+        showToast('Task deleted', 'info');
+        await fetchTasks();
+        return;
+      }
       const res = await fetch(getApiUrl(`/api/tasks/${id}`), {
         method: 'DELETE',
         headers: getAuthHeaders(),
@@ -422,6 +430,14 @@ export default function App() {
       showToast('Task deleted', 'info');
       await fetchTasks();
     } catch (err) {
+      if (IS_GITHUB_PAGES || err.name === 'TypeError' || err.message.includes('Failed to fetch') || err.message.includes('Failed to delete')) {
+        let lsTasks = getStoredTasksFromLS();
+        lsTasks = lsTasks.filter((t) => t.id != id);
+        setStoredTasksToLS(lsTasks);
+        showToast('Task deleted', 'info');
+        await fetchTasks();
+        return;
+      }
       showToast(`Error: ${err.message}`, 'error');
     }
   };

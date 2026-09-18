@@ -385,11 +385,27 @@ async function updateTaskFullDetails(id, details) {
 async function deleteTask(id) {
   if (!confirm("Are you sure you want to delete this task?")) return;
   try {
+    if (IS_GITHUB_PAGES) {
+      let allTasks = getStoredTasksFromLocalStorage();
+      allTasks = allTasks.filter(t => t.id != id);
+      setStoredTasksToLocalStorage(allTasks);
+      showToast('Task deleted', 'info');
+      await fetchTasks();
+      return;
+    }
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
     if (res.status === 404) {
+      let allTasks = getStoredTasksFromLocalStorage();
+      if (allTasks.some(t => t.id == id)) {
+        allTasks = allTasks.filter(t => t.id != id);
+        setStoredTasksToLocalStorage(allTasks);
+        showToast('Task deleted', 'info');
+        await fetchTasks();
+        return;
+      }
       showToast(`Task #${id} not found. Refreshing...`, 'warning');
       await fetchTasks();
       return;
@@ -398,6 +414,14 @@ async function deleteTask(id) {
     showToast('Task deleted', 'info');
     await fetchTasks();
   } catch (err) {
+    if (IS_GITHUB_PAGES || err.name === 'TypeError' || err.message.includes('Failed to fetch') || err.message.includes('Failed to delete')) {
+      let allTasks = getStoredTasksFromLocalStorage();
+      allTasks = allTasks.filter(t => t.id != id);
+      setStoredTasksToLocalStorage(allTasks);
+      showToast('Task deleted', 'info');
+      await fetchTasks();
+      return;
+    }
     showToast(`Error: ${err.message}`, 'error');
   }
 }
